@@ -123,6 +123,8 @@ pub enum ProviderType {
     OpenAI,
     Anthropic,
     Ollama,
+    Gemini,
+    Grok,
 }
 
 /// Configuration for AI providers.
@@ -145,6 +147,9 @@ pub struct AetherEngine {
     context: Option<CoreContext>,
     parallel: bool,
     max_retries: u32,
+    heal: bool,
+    cache: bool,
+    toon: bool,
 }
 
 #[napi]
@@ -154,11 +159,14 @@ impl AetherEngine {
     pub fn openai(model: Option<String>) -> Result<Self> {
         Ok(Self {
             provider_type: ProviderType::OpenAI,
-            model: model.unwrap_or_else(|| "gpt-5.2-thinking".to_string()),
+            model: model.unwrap_or_else(|| "gpt-4o".to_string()),
             api_key: std::env::var("OPENAI_API_KEY").ok(),
             context: None,
             parallel: true,
             max_retries: 2,
+            heal: false,
+            cache: false,
+            toon: false,
         })
     }
 
@@ -167,11 +175,30 @@ impl AetherEngine {
     pub fn anthropic(model: Option<String>) -> Result<Self> {
         Ok(Self {
             provider_type: ProviderType::Anthropic,
-            model: model.unwrap_or_else(|| "claude-opus-4-5".to_string()),
+            model: model.unwrap_or_else(|| "claude-3-5-sonnet-latest".to_string()),
             api_key: std::env::var("ANTHROPIC_API_KEY").ok(),
             context: None,
             parallel: true,
             max_retries: 2,
+            heal: false,
+            cache: false,
+            toon: false,
+        })
+    }
+
+    /// Create a new engine with Gemini provider.
+    #[napi(factory)]
+    pub fn gemini(model: Option<String>) -> Result<Self> {
+        Ok(Self {
+            provider_type: ProviderType::Gemini,
+            model: model.unwrap_or_else(|| "gemini-1.5-pro".to_string()),
+            api_key: std::env::var("GOOGLE_API_KEY").ok(),
+            context: None,
+            parallel: true,
+            max_retries: 2,
+            heal: false,
+            cache: false,
+            toon: false,
         })
     }
 
@@ -185,6 +212,25 @@ impl AetherEngine {
             context: None,
             parallel: true,
             max_retries: 2,
+            heal: false,
+            cache: false,
+            toon: false,
+        })
+    }
+
+    /// Create a new engine with Grok provider.
+    #[napi(factory)]
+    pub fn grok(model: Option<String>) -> Result<Self> {
+        Ok(Self {
+            provider_type: ProviderType::Grok,
+            model: model.unwrap_or_else(|| "grok-1".to_string()),
+            api_key: std::env::var("XAI_API_KEY").ok(),
+            context: None,
+            parallel: true,
+            max_retries: 2,
+            heal: false,
+            cache: false,
+            toon: false,
         })
     }
 
@@ -222,6 +268,24 @@ impl AetherEngine {
         self.max_retries = retries;
     }
 
+    /// Enable or disable self-healing.
+    #[napi]
+    pub fn set_heal(&mut self, enabled: bool) {
+        self.heal = enabled;
+    }
+
+    /// Enable or disable semantic caching.
+    #[napi]
+    pub fn set_cache(&mut self, enabled: bool) {
+        self.cache = enabled;
+    }
+
+    /// Enable or disable TOON formatting.
+    #[napi]
+    pub fn set_toon(&mut self, enabled: bool) {
+        self.toon = enabled;
+    }
+
     /// Generate code with a simple prompt (one-liner).
     #[napi]
     pub async fn generate(&self, prompt: String) -> Result<String> {
@@ -237,7 +301,6 @@ impl AetherEngine {
         self.render_internal(&template.inner).await
     }
 
-    /// Internal render implementation.
     async fn render_internal(&self, template: &CoreTemplate) -> Result<String> {
         match self.provider_type {
             ProviderType::OpenAI => {
@@ -262,8 +325,30 @@ impl AetherEngine {
                 
                 self.render_with_provider(template, provider).await
             }
+            ProviderType::Gemini => {
+                let api_key = self.api_key.clone()
+                    .or_else(|| std::env::var("GOOGLE_API_KEY").ok())
+                    .ok_or_else(|| Error::from_reason("GOOGLE_API_KEY (GEMINI) not set"))?;
+                
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                let provider = aether_ai::GeminiProvider::new(config)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                self.render_with_provider(template, provider).await
+            }
             ProviderType::Ollama => {
                 let provider = OllamaProvider::new(&self.model);
+                self.render_with_provider(template, provider).await
+            }
+            ProviderType::Grok => {
+                let api_key = self.api_key.clone()
+                    .or_else(|| std::env::var("XAI_API_KEY").ok())
+                    .ok_or_else(|| Error::from_reason("XAI_API_KEY not set"))?;
+                
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model)
+                    .with_base_url("https://api.x.ai/v1/chat/completions");
+
+                let provider = OpenAiProvider::new(config)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
                 self.render_with_provider(template, provider).await
             }
         }
@@ -281,6 +366,17 @@ impl AetherEngine {
         
         if let Some(ref ctx) = self.context {
             engine = engine.with_context(ctx.clone());
+        }
+
+        // Apply Premium Features
+        if self.heal {
+            engine = engine.with_validator(aether_core::validation::RustValidator);
+        }
+        if self.toon {
+            engine = engine.with_toon(true);
+        }
+        if self.cache {
+            engine = engine.with_cache(aether_core::cache::SemanticCache::new().map_err(|e| Error::from_reason(e.to_string()))?);
         }
         
         engine.render(template).await

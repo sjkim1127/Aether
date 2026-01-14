@@ -12,14 +12,14 @@ Aether Codegen is a framework that enables AI to dynamically inject source code 
 ### Key Features
 
 - 🎯 **One-line AI calls** - Generate code with a single macro invocation
-- 📝 **Template-based injection** - Define slots in templates using `{{AI:slot_name}}` syntax
-- 🔌 **Multiple AI providers** - OpenAI, Anthropic Claude, and local Ollama
-  - **OpenAI**: GPT-5.2-Instant, GPT-5.2-Thinking, GPT-5.2-Pro
-  - **Anthropic**: Claude Opus 4.5, Claude Sonnet 4
-  - **Local**: Ollama with CodeLlama and other models
-- ⚡ **Parallel generation** - Generate multiple slots concurrently
-- 🛡️ **Validation & constraints** - Define constraints on generated code
-- 🧩 **Proc macros** - Compile-time markers and runtime helpers
+- 🧪 **Self-Healing (Alpha)** - Automatic error detection and self-correction loop
+- 🧠 **Semantic Caching** - Local response caching using embeddings to save costs
+- � **TOON Protocol** - Token-Oriented Object Notation for extreme token efficiency
+- 📡 **Live Streaming** - Real-time code generation for interactive experiences
+- 🔌 **Expanded Providers** - OpenAI, Anthropic, Google Gemini, Ollama, and xAI Grok
+- ⚡ **Parallel Generation** - Concurrent slot processing for maximum speed
+- 🛡️ **Validation & Types** - Integrated constraints and type-safe injection
+- 🧩 **Native Node.js** - High-performance C++ bindings for JavaScript ecosystem
 
 ## Installation
 
@@ -117,71 +117,52 @@ You can specify the type of code to generate:
 ```
 aether-codegen/
 ├── crates/
-│   ├── aether-core/     # Core library
-│   │   ├── template.rs  # Template parsing
-│   │   ├── slot.rs      # Slot definitions
-│   │   ├── provider.rs  # AI provider trait
-│   │   ├── context.rs   # Injection context
-│   │   └── engine.rs    # Main orchestrator
-│   ├── aether-ai/       # AI providers
-│   │   ├── openai.rs    # OpenAI integration
-│   │   ├── anthropic.rs # Claude integration
-│   │   └── ollama.rs    # Local Ollama
-│   └── aether-macros/   # Proc macros
-│       └── lib.rs       # ai!, ai_slot!, etc.
-└── examples/            # Usage examples
+│   ├── aether-core/       # Core Engine & Infrastructure
+│   │   ├── validation.rs  # Self-Healing & Validation logic
+│   │   ├── cache.rs       # Semantic Caching with fastembed
+│   │   ├── toon.rs        # TOON Protocol implementation
+│   │   ├── engine.rs      # Main orchestrator
+│   │   └── ...
+│   ├── aether-ai/         # AI Provider Implementations
+│   │   ├── gemini.rs      # Google Gemini (v1beta/v1)
+│   │   ├── grok.rs        # xAI Grok (OpenAI-compatible)
+│   │   ├── openai.rs      # OpenAI GPT series
+│   │   └── ...
+│   └── aether-node/       # NAPI-RS Node.js Bindings
+└── examples/              # Usage patterns & demos
 ```
 
 ## AI Providers
 
-### OpenAI
+### Google Gemini
 
 ```rust
-use aether_ai::OpenAiProvider;
+use aether_ai::GeminiProvider;
 
-// From environment (OPENAI_API_KEY)
-let provider = OpenAiProvider::from_env()?;
+// From environment (GOOGLE_API_KEY)
+let provider = GeminiProvider::from_env()?;
 
-// Or with explicit configuration
-use aether_core::ProviderConfig;
-let config = ProviderConfig::new("your-api-key", "gpt-5.2-thinking")
-    .with_temperature(0.7)
-    .with_max_tokens(2048);
-let provider = OpenAiProvider::new(config)?;
+// Or use the latest high-speed model
+let provider = aether_ai::gemini("gemini-3-flash-preview")?;
 ```
 
-### Available OpenAI Models
-
-| Model | Use Case |
-|-------|----------|
-| `gpt-5.2-instant` | Fast responses, everyday tasks |
-| `gpt-5.2-thinking` | Complex coding and logic (default) |
-| `gpt-5.2-pro` | Highest quality, hard problems |
-
-### Anthropic Claude
+### xAI Grok
 
 ```rust
-use aether_ai::AnthropicProvider;
-
-// From environment (ANTHROPIC_API_KEY)
-let provider = AnthropicProvider::from_env()?;
-
-// Or with specific model
-let provider = aether_ai::anthropic("claude-opus-4-5")?;
-// Or use Claude Sonnet 4 for faster responses
-let provider = aether_ai::anthropic("claude-sonnet-4")?;
+// Grok uses the OpenAI-compatible implementation
+let provider = aether_ai::grok("grok-1")?;
 ```
+
+### OpenAI & Anthropic
+
+- **OpenAI**: Supports `gpt-5.2`, `gpt-5.1`, etc.
+- **Anthropic**: Supports `claude-4.5-sonnet-latest`, `claude-4.5-opus-latest`.
 
 ### Ollama (Local)
 
 ```rust
 use aether_ai::OllamaProvider;
-
-// Default (localhost:11434)
 let provider = OllamaProvider::new("codellama");
-
-// Or with custom URL
-let provider = OllamaProvider::with_options("codellama", "http://custom:11434/api/generate");
 ```
 
 ## Advanced Usage
@@ -236,9 +217,9 @@ let result = engine.render(&template).await?; // All slots generated in parallel
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `OPENAI_API_KEY` | OpenAI API key | - |
-| `AETHER_API_KEY` | Alternative API key | - |
-| `AETHER_MODEL` | Default model | `gpt-5.2-thinking` |
 | `ANTHROPIC_API_KEY` | Anthropic API key | - |
+| `GOOGLE_API_KEY` | Google Gemini API key | - |
+| `XAI_API_KEY` | xAI Grok API key | - |
 | `OLLAMA_MODEL` | Ollama model name | `codellama` |
 | `OLLAMA_URL` | Ollama API URL | `http://localhost:11434/api/generate` |
 
@@ -261,8 +242,12 @@ const { AetherEngine, Template, generate } = require('@aether/codegen');
 const code = await generate("Create a login form with validation");
 console.log(code);
 
-// Using engine with template
-const engine = AetherEngine.openai("gpt-5.2-thinking");
+// Enable Premium Features
+const engine = AetherEngine.openai("gpt-4o");
+engine.setHeal(true);  // Enable Self-Healing
+engine.setCache(true); // Enable Semantic Cache
+engine.setToon(true);  // Enable TOON Protocol
+
 const template = new Template("<div>{{AI:content}}</div>");
 template.setSlot("content", "Generate a welcome message");
 const result = await engine.render(template);

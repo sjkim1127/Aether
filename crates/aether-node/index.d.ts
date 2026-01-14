@@ -7,7 +7,9 @@
 export const enum ProviderType {
   OpenAI = 'OpenAI',
   Anthropic = 'Anthropic',
-  Ollama = 'Ollama'
+  Ollama = 'Ollama',
+  Gemini = 'Gemini',
+  Grok = 'Grok'
 }
 /** Configuration for AI providers. */
 export interface ProviderConfig {
@@ -61,8 +63,12 @@ export declare class AetherEngine {
   static openai(model?: string | undefined | null): AetherEngine
   /** Create a new engine with Anthropic provider. */
   static anthropic(model?: string | undefined | null): AetherEngine
+  /** Create a new engine with Gemini provider. */
+  static gemini(model?: string | undefined | null): AetherEngine
   /** Create a new engine with Ollama provider. */
   static ollama(model?: string | undefined | null): AetherEngine
+  /** Create a new engine with Grok provider. */
+  static grok(model?: string | undefined | null): AetherEngine
   /** Set the API key. */
   setApiKey(key: string): void
   /** Set context for generation. */
@@ -71,6 +77,12 @@ export declare class AetherEngine {
   setParallel(enabled: boolean): void
   /** Set maximum retries. */
   setMaxRetries(retries: number): void
+  /** Enable or disable self-healing. */
+  setHeal(enabled: boolean): void
+  /** Enable or disable semantic caching. */
+  setCache(enabled: boolean): void
+  /** Enable or disable TOON formatting. */
+  setToon(enabled: boolean): void
   /** Generate code with a simple prompt (one-liner). */
   generate(prompt: string): Promise<string>
   /** Render a template with AI-generated code. */
