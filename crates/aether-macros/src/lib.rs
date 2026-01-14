@@ -164,22 +164,44 @@ pub fn aether_secure(attr: TokenStream, item: TokenStream) -> TokenStream {
             use aether_core::AetherRuntime;
             use std::collections::HashMap;
 
-            // 1. Setup Engine (Assuming provider is available via env or global)
-            // In a real app, you might want to inject or globalize the engine
-            let provider = aether_ai::OpenAiProvider::from_env().expect("AI Provider not configured");
-            let engine = InjectionEngine::new(provider);
+            // 1. Setup Engine & Request Script (Dynamic Provider Selection)
+            // We must handle rendering inside match arms because InjectionEngine<P> types differ.
             
-            // 2. Request script from AI
+            let provider_type = std::env::var("AETHER_PROVIDER").unwrap_or_else(|_| "openai".to_string());
+            
+            // Prepare template (common logic)
             let script_prompt = format!(
-                "{}. Output ONLY raw Rhai script code. The inputs available are: {:?}.",
+                "Implement this logic in Rhai script: {}. Output ONLY the raw Rhai script code. The inputs available are: {:?}. Return the result directly. Do not wrap in markdown.",
                 #prompt,
                 vec![#(stringify!(#arg_names)),*]
             );
             
             let template = Template::new("{{AI:script}}")
                 .configure_slot(Slot::new("script", script_prompt).with_temperature(0.0));
-            
-            let script = engine.render(&template).await.expect("AI script generation failed");
+
+            let script = match provider_type.to_lowercase().as_str() {
+                "anthropic" | "claude" => {
+                    let p = aether_ai::AnthropicProvider::from_env().expect("Anthropic Provider not configured");
+                    let engine = InjectionEngine::new(p);
+                    engine.render(&template).await.expect("AI script generation failed")
+                },
+                "gemini" => {
+                    let p = aether_ai::GeminiProvider::from_env().expect("Gemini Provider not configured");
+                    let engine = InjectionEngine::new(p);
+                    engine.render(&template).await.expect("AI script generation failed")
+                },
+                "ollama" => {
+                    let model = std::env::var("AETHER_MODEL").unwrap_or_else(|_| "llama3".to_string());
+                    let p = aether_ai::OllamaProvider::new(&model);
+                    let engine = InjectionEngine::new(p);
+                    engine.render(&template).await.expect("AI script generation failed")
+                },
+                _ => {
+                   let p = aether_ai::OpenAiProvider::from_env().expect("OpenAI Provider not configured");
+                   let engine = InjectionEngine::new(p);
+                   engine.render(&template).await.expect("AI script generation failed")
+                }
+            };
 
             // 3. Execute in Runtime
             let runtime = AetherRuntime::new();

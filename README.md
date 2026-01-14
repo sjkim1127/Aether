@@ -151,7 +151,7 @@ let provider = aether_ai::gemini("gemini-3-flash-preview")?;
 
 ```rust
 // Grok uses the OpenAI-compatible implementation
-let provider = aether_ai::grok("grok-1")?;
+let provider = aether_ai::grok("grok-4")?;
 ```
 
 ### OpenAI & Anthropic
@@ -314,6 +314,58 @@ const html: string = await renderTemplate(
 cd crates/aether-node
 npm install
 npm run build
+```
+
+## Python Bindings
+
+Aether provides high-performance Python bindings, allowing you to use the Rust engine directly from Python scripts.
+
+### Installation
+
+```bash
+pip install aether-codegen
+```
+
+### Quick Start (Python)
+
+```python
+import aether
+import os
+
+# Initialize Engine (supports OpenAI, Anthropic, Gemini, Ollama)
+engine = aether.Engine("anthropic", model="claude-3-opus-20240229")
+
+# Create a template
+template = aether.Template("def fibonacci(n): {{AI:code}}")
+template.add_slot("code", "Implement recursive Fibonacci calculation", 0.7)
+
+# Render using the Rust core engine
+result = engine.render(template)
+print(result)
+```
+
+### Aether Shield for Python
+
+You can use Aether to protect Python applications by offloading logic to the AI runtime.
+
+```python
+# The verification logic exists ONLY in the AI model, not in your code!
+oracle_template = aether.Template("{{AI:check}}")
+oracle_template.add_slot("check", 
+    f"Verify if '{user_input}' is the correct answer to the riddle. Check carefully.", 
+    0.0
+)
+result = engine.render(oracle_template)
+if "ACCESS_GRANTED" in result:
+    unlock_vault()
+```
+
+### Building from Source
+
+```bash
+cd crates/aether-python
+maturin build --release
+pip install target/wheels/aether_codegen-*.whl
 ```
 
 ## Examples

@@ -1,6 +1,6 @@
 {
     "name": "@sjkim1127/aether-codegen",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "AI-powered dynamic code injection framework - Generate code with AI using templates",
     "main": "index.js",
     "types": "index.d.ts",

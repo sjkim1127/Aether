@@ -5,11 +5,11 @@ members = [
     "crates/aether-ai",
     "crates/aether-macros",
     "crates/aether-node",
-    "crates/aether-cli",
+    "crates/aether-cli", "demo/vault", "crates/aether-python",
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["Aether Team"]
 license = "MIT"

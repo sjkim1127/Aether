@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-01-15
+
+### Added
+- 🐍 **Python Bindings**: Official `aether-python` crate allowing the Aether engine to be used directly from Python. Published on PyPI as `aether-codegen`.
+- 🔐 **Schrödinger's Vault Demo (Python)**: A new Python GUI demo showcasing Aether Shield for Python, protecting logic with an AI Oracle.
+- 🛠️ **Maturin Integration**: Added support for building Python wheels using `maturin`.
+
+### Changed
+- 🔄 **Consistent Provider Config**: Refactored `aether-python` to properly handle different provider configurations (OpenAI, Anthropic, Gemini, Ollama).
+- 🛡️ **Prompt Hardening**: Improved `aether_secure` macro prompts for better resilience against answer leakage.
+
+### Fixed
+- Fixed type mismatches in Python bindings for provider initialization.
+
 ## [0.1.1] - 2026-01-15
 
 ### Added
