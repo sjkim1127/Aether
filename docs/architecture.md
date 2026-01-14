@@ -2,6 +2,8 @@
 
 Aether is a high-performance, structured AI code injection framework. It is designed to bridge the gap between creative LLM generation and the strict requirements of source code.
 
+For a detailed comparison on why Aether is superior to raw API calls, see [Aether vs Raw API](./COMPARISON.md).
+
 ## Core Concepts
 
 ### 1. Template & Slots

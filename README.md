@@ -7,7 +7,9 @@
 
 ## Overview
 
-Aether Codegen is a framework that enables AI to dynamically inject source code into templates. With a single line of code, you can call an AI to generate and inject code into predefined slots within your templates.
+Aether is a high-performance, structured AI code injection framework. It is designed to bridge the gap between creative LLM generation and the strict requirements of source code.
+
+For a detailed comparison on why Aether is superior to raw API calls, see [Aether vs Raw API](./COMPARISON.md).
 
 ### Key Features
 
@@ -309,6 +311,7 @@ See the [examples](./examples) directory for more usage patterns:
 ## Documentation
 
 - [Architecture Overview](./docs/ARCHITECTURE.md) - How Aether works internally
+- [Aether vs Raw API](./docs/COMPARISON.md) - Why use a framework?
 - [Changelog](./docs/CHANGELOG.md) - Recent updates and version history
 - [API Reference (Node.js)](./crates/aether-node/index.d.ts) - TypeScript definitions
 
