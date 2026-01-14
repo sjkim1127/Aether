@@ -191,15 +191,42 @@ const { AetherEngine } = require('aether-codegen');
 
 ---
 
+## Grok (xAI)
+
+Access to xAI's Grok models via their OpenAI-compatible API.
+
+### Available Models
+
+| Model | Besf For |
+|-------|----------|
+| `grok-1` | High performance reasoning |
+| `grok-beta` | Latest features |
+
+### Configuration
+
+**Rust:**
+```rust
+// Uses OpenAiProvider internally
+let provider = aether_ai::grok("grok-1")?;
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `XAI_API_KEY` | Your xAI API key |
+
+---
+
 ## Comparison
 
-| Feature | OpenAI | Anthropic | Gemini | Ollama |
-|---------|--------|-----------|--------|--------|
-| Quality | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
-| Speed | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ |
-| Cost | Paid | Paid | Free Tier | Free |
-| Privacy | Cloud | Cloud | Cloud | Local |
-| Offline | ❌ | ❌ | ❌ | ✅ |
+| Feature | OpenAI | Anthropic | Gemini | Grok | Ollama |
+|---------|--------|-----------|--------|------|--------|
+| Quality | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
+| Speed | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ |
+| Cost | Paid | Paid | Free Tier | Paid | Free |
+| Privacy | Cloud | Cloud | Cloud | Cloud | Local |
+| Offline | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 ## Custom Providers
 

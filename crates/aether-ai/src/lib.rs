@@ -72,15 +72,6 @@ pub fn anthropic(model: &str) -> Result<AnthropicProvider> {
 pub fn gemini(model: &str) -> Result<GeminiProvider> {
     match GeminiProvider::from_env() {
         Ok(mut p) => {
-            // Override model if different
-            // Note: from_env reads GEMINI_MODEL, but we override here
-            // This is a bit tricky since we don't have a direct set_model on the struct easily
-            // But we can rebuild it or just accept from_env uses env.
-            // For now, let's just re-use the one from env but with new config if needed.
-            // Actually, cleanest is to just return what from_env gave, but respecting the argument?
-            // Let's implement set_model or just re-create config.
-             
-            // Simpler: Just config new one
              let api_key = std::env::var("GOOGLE_API_KEY")
                 .map_err(|_| AetherError::ConfigError("GOOGLE_API_KEY not set".to_string()))?;
              let config = ProviderConfig::new(api_key, model);
@@ -88,6 +79,33 @@ pub fn gemini(model: &str) -> Result<GeminiProvider> {
         },
         Err(e) => Err(e)
     }
+}
+
+/// Create a Grok (xAI) provider with a single line.
+///
+/// Uses the OpenAI-compatible API from xAI.
+/// Requires `XAI_API_KEY` environment variable.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let provider = aether_ai::grok("grok-1");
+/// ```
+pub fn grok(model: &str) -> Result<OpenAiProvider> {
+    let api_key = std::env::var("XAI_API_KEY")
+        .map_err(|_| AetherError::ConfigError("XAI_API_KEY not set".to_string()))?;
+
+    let config = ProviderConfig::new(api_key, model)
+        .with_base_url("https://api.x.ai/v1/chat/completions"); // OpenAI impl appends nothing, wait.
+    
+    // Check openai.rs implementation. It appends nothing to base_url?
+    // openai.rs: let url = self.config.base_url.as_deref().unwrap_or(OPENAI_API_URL);
+    // OPENAI_API_URL is full path.
+    // So we need full path here.
+    
+    let config = config.with_base_url("https://api.x.ai/v1/chat/completions");
+
+    OpenAiProvider::new(config)
 }
 
 /// Create an Ollama provider with a single line.
