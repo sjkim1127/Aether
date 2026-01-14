@@ -29,6 +29,25 @@ struct MessageRequest {
     messages: Vec<Message>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
+}
+
+/// Anthropic streaming response event (minimal)
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+enum StreamEvent {
+    #[serde(rename = "content_block_delta")]
+    ContentBlockDelta {
+        delta: TextDelta,
+    },
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Deserialize)]
+struct TextDelta {
+    text: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -113,6 +132,9 @@ impl AnthropicProvider {
     }
 }
 
+use aether_core::provider::StreamResponse;
+use futures::stream::{BoxStream, StreamExt};
+
 #[async_trait]
 impl AiProvider for AnthropicProvider {
     fn name(&self) -> &str {
@@ -138,6 +160,7 @@ impl AiProvider for AnthropicProvider {
             system,
             messages,
             temperature: self.config.temperature,
+            stream: None,
         };
 
         let url = self.config.base_url.as_deref().unwrap_or(ANTHROPIC_API_URL);
@@ -181,6 +204,92 @@ impl AiProvider for AnthropicProvider {
             tokens_used: Some(msg_response.usage.input_tokens + msg_response.usage.output_tokens),
             metadata: None,
         })
+    }
+
+    fn generate_stream(
+        &self,
+        request: GenerationRequest,
+    ) -> BoxStream<'static, Result<StreamResponse>> {
+        let client = self.client.clone();
+        let config = self.config.clone();
+        let system = Some(request.system_prompt.unwrap_or_else(|| {
+            self.build_system_prompt(&request.slot.kind, request.context.as_deref())
+        }));
+        let user_prompt = request.slot.prompt.clone();
+        let url = config.base_url.as_deref().unwrap_or(ANTHROPIC_API_URL).to_string();
+
+        let api_request = MessageRequest {
+            model: config.model.clone(),
+            max_tokens: config.max_tokens.unwrap_or(4096),
+            system,
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: user_prompt,
+            }],
+            temperature: config.temperature,
+            stream: Some(true),
+        };
+
+        let stream = async_stream::stream! {
+            let response = client
+                .post(&url)
+                .header("x-api-key", &config.api_key)
+                .header("anthropic-version", ANTHROPIC_VERSION)
+                .header("Content-Type", "application/json")
+                .json(&api_request)
+                .send()
+                .await
+                .map_err(|e| aether_core::AetherError::NetworkError(e.to_string()));
+
+            let response = match response {
+                Ok(r) => r,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                yield Err(aether_core::AetherError::ProviderError(format!(
+                    "API error {}: {}",
+                    status, body
+                )));
+                return;
+            }
+
+            let mut stream = response.bytes_stream();
+            
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = match chunk_result {
+                    Ok(c) => c,
+                    Err(e) => {
+                        yield Err(aether_core::AetherError::NetworkError(e.to_string()));
+                        break;
+                    }
+                };
+
+                let text = String::from_utf8_lossy(&chunk);
+                for line in text.lines() {
+                    let line = line.trim();
+                    if line.is_empty() { continue; }
+                    
+                    if let Some(event_data) = line.strip_prefix("data: ") {
+                        if let Ok(event) = serde_json::from_str::<StreamEvent>(event_data) {
+                            if let StreamEvent::ContentBlockDelta { delta } = event {
+                                yield Ok(StreamResponse {
+                                    delta: delta.text,
+                                    metadata: None,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        Box::pin(stream)
     }
 }
 

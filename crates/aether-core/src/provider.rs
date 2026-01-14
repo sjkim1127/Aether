@@ -105,6 +105,8 @@ pub struct GenerationRequest {
     pub system_prompt: Option<String>,
 }
 
+use futures::stream::BoxStream;
+
 /// Response from code generation.
 #[derive(Debug, Clone)]
 pub struct GenerationResponse {
@@ -115,6 +117,16 @@ pub struct GenerationResponse {
     pub tokens_used: Option<u32>,
 
     /// Generation metadata.
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// A single chunk of a streaming response.
+#[derive(Debug, Clone)]
+pub struct StreamResponse {
+    /// The new text chunk.
+    pub delta: String,
+
+    /// Final metadata (only sent in the last chunk).
     pub metadata: Option<serde_json::Value>,
 }
 
@@ -136,6 +148,28 @@ pub trait AiProvider: Send + Sync {
     ///
     /// Generated code response or an error.
     async fn generate(&self, request: GenerationRequest) -> Result<GenerationResponse>;
+
+    /// Generate a stream of code for a slot.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The generation request containing slot info
+    ///
+    /// # Returns
+    ///
+    /// A pinned stream of chunks or an error.
+    fn generate_stream(
+        &self,
+        _request: GenerationRequest,
+    ) -> BoxStream<'static, Result<StreamResponse>> {
+        let name = self.name().to_string();
+        Box::pin(async_stream::stream! {
+            yield Err(crate::AetherError::ProviderError(format!(
+                "Streaming not implemented for provider: {}",
+                name
+            )));
+        })
+    }
 
     /// Generate code for multiple slots in batch.
     ///
@@ -195,6 +229,31 @@ impl AiProvider for MockProvider {
             tokens_used: Some(10),
             metadata: None,
         })
+    }
+
+    fn generate_stream(
+        &self,
+        request: GenerationRequest,
+    ) -> BoxStream<'static, Result<StreamResponse>> {
+        let code = self
+            .responses
+            .get(&request.slot.name)
+            .cloned()
+            .unwrap_or_else(|| format!("// Generated code for: {}", request.slot.name));
+
+        use futures::StreamExt;
+        let words: Vec<String> = code.split_whitespace().map(|s| format!("{} ", s)).collect();
+        
+        let stream = async_stream::stream! {
+            for word in words {
+                yield Ok(StreamResponse {
+                    delta: word,
+                    metadata: None,
+                });
+            }
+        };
+        
+        Box::pin(stream)
     }
 }
 

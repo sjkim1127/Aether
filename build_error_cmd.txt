@@ -1,0 +1,125 @@
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   F:\Aether\crates\aether-node\Cargo.toml
+workspace: F:\Aether\Cargo.toml
+warning: unused variable: `p`
+  --> crates\aether-ai\src\lib.rs:74:16
+   |
+74 |         Ok(mut p) => {
+   |                ^ help: if this is intentional, prefix it with an underscore: `_p`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> crates\aether-ai\src\lib.rs:74:12
+   |
+74 |         Ok(mut p) => {
+   |            ----^
+   |            |
+   |            help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `aether-ai` (lib) generated 2 warnings (run `cargo fix --lib -p aether-ai` to apply 1 suggestion)
+   Compiling aether-cli v0.1.0 (F:\Aether\crates\aether-cli)
+warning: unused imports: `AnthropicProvider`, `GeminiProvider`, `OllamaProvider`, and `OpenAiProvider`
+ --> crates\aether-cli\src\main.rs:1:17
+  |
+1 | use aether_ai::{OpenAiProvider, AnthropicProvider, OllamaProvider, GeminiProvider};
+  |                 ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `ProviderConfig`
+ --> crates\aether-cli\src\main.rs:2:46
+  |
+2 | use aether_core::{InjectionEngine, Template, ProviderConfig};
+  |                                              ^^^^^^^^^^^^^^
+
+warning: unused imports: `debug` and `error`
+ --> crates\aether-cli\src\main.rs:6:17
+  |
+6 | use log::{info, error, debug};
+  |                 ^^^^^  ^^^^^
+
+error[E0310]: the parameter type `P` may not live long enough
+   --> crates\aether-cli\src\main.rs:140:18
+    |
+140 |     let result = engine.render(&tmpl).await.context("Code generation failed")?;
+    |                  ^^^^^^^^^^^^^^^^^^^^
+    |                  |
+    |                  the parameter type `P` must be valid for the static lifetime...
+    |                  ...so that the type `P` will meet its required lifetime bounds
+    |
+help: consider adding an explicit lifetime bound
+    |
+136 |     P: aether_core::AiProvider + Send + Sync + 'static,
+    |                                              +++++++++
+
+error[E0311]: the parameter type `P` may not live long enough
+   --> crates\aether-cli\src\main.rs:140:18
+    |
+134 | async fn run_generation<P>(engine: InjectionEngine<P>, tmpl: Template, output: &Option<PathBuf>) -> Result<()> 
+    |                                                                                ---------------- the parameter type `P` must be valid for the anonymous lifetime defined here...
+...
+140 |     let result = engine.render(&tmpl).await.context("Code generation failed")?;
+    |                  ^^^^^^^^^^^^^^^^^^^^ ...so that the type `P` will meet its required lifetime bounds
+    |
+help: consider adding an explicit lifetime bound
+    |
+134 ~ async fn run_generation<'a, P>(engine: InjectionEngine<P>, tmpl: Template, output: &'a Option<PathBuf>) -> Result<()> 
+135 | where 
+136 ~     P: aether_core::AiProvider + Send + Sync + 'a,
+    |
+
+error[E0310]: the parameter type `P` may not live long enough
+   --> crates\aether-cli\src\main.rs:140:39
+    |
+140 |     let result = engine.render(&tmpl).await.context("Code generation failed")?;
+    |                                       ^^^^^
+    |                                       |
+    |                                       the parameter type `P` must be valid for the static lifetime...
+    |                                       ...so that the type `P` will meet its required lifetime bounds
+    |
+help: consider adding an explicit lifetime bound
+    |
+136 |     P: aether_core::AiProvider + Send + Sync + 'static,
+    |                                              +++++++++
+
+error[E0311]: the parameter type `P` may not live long enough
+   --> crates\aether-cli\src\main.rs:140:39
+    |
+134 | async fn run_generation<P>(engine: InjectionEngine<P>, tmpl: Template, output: &Option<PathBuf>) -> Result<()> 
+    |                                                                                ---------------- the parameter type `P` must be valid for the anonymous lifetime defined here...
+...
+140 |     let result = engine.render(&tmpl).await.context("Code generation failed")?;
+    |                                       ^^^^^ ...so that the type `P` will meet its required lifetime bounds
+    |
+help: consider adding an explicit lifetime bound
+    |
+134 ~ async fn run_generation<'a, P>(engine: InjectionEngine<P>, tmpl: Template, output: &'a Option<PathBuf>) -> Result<()> 
+135 | where 
+136 ~     P: aether_core::AiProvider + Send + Sync + 'a,
+    |
+
+error[E0277]: `ProviderType` doesn't implement `std::fmt::Debug`
+  --> crates\aether-cli\src\main.rs:82:53
+   |
+82 |             info!("Initializing AI provider: {:?}", provider);
+   |                                              ----   ^^^^^^^^ `ProviderType` cannot be formatted using `{:?}` because it doesn't implement `std::fmt::Debug`
+   |                                              |
+   |                                              required by this formatting parameter
+   |
+   = help: the trait `std::fmt::Debug` is not implemented for `ProviderType`
+   = note: add `#[derive(Debug)]` to `ProviderType` or manually `impl std::fmt::Debug for ProviderType`
+   = note: required for `&ProviderType` to implement `std::fmt::Debug`
+   = note: this error originates in the macro `$crate::__private_api::format_args` which comes from the expansion of the macro `info` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider annotating `ProviderType` with `#[derive(Debug)]`
+   |
+46 + #[derive(Debug)]
+47 | enum ProviderType {
+   |
+
+Some errors have detailed explanations: E0277, E0310, E0311.
+For more information about an error, try `rustc --explain E0277`.
+warning: `aether-cli` (bin "aether-cli") generated 3 warnings
+error: could not compile `aether-cli` (bin "aether-cli") due to 5 previous errors; 3 warnings emitted

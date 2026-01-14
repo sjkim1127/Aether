@@ -30,6 +30,8 @@ struct ChatRequest {
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
 }
 
 /// Chat message.
@@ -54,6 +56,24 @@ struct ChatChoice {
 #[derive(Debug, Deserialize)]
 struct Usage {
     total_tokens: u32,
+}
+
+/// OpenAI streaming response chunk.
+#[derive(Debug, Deserialize)]
+struct ChatStreamResponse {
+    choices: Vec<ChatStreamChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatStreamChoice {
+    delta: ChatStreamDelta,
+    #[allow(dead_code)]
+    finish_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatStreamDelta {
+    content: Option<String>,
 }
 
 impl OpenAiProvider {
@@ -108,6 +128,9 @@ impl OpenAiProvider {
     }
 }
 
+use aether_core::provider::StreamResponse;
+use futures::stream::{BoxStream, StreamExt};
+
 #[async_trait]
 impl AiProvider for OpenAiProvider {
     fn name(&self) -> &str {
@@ -138,6 +161,7 @@ impl AiProvider for OpenAiProvider {
             messages,
             max_tokens: self.config.max_tokens,
             temperature: self.config.temperature,
+            stream: None,
         };
 
         let url = self.config.base_url.as_deref().unwrap_or(OPENAI_API_URL);
@@ -186,6 +210,100 @@ impl AiProvider for OpenAiProvider {
             tokens_used: chat_response.usage.map(|u| u.total_tokens),
             metadata: None,
         })
+    }
+
+    fn generate_stream(
+        &self,
+        request: GenerationRequest,
+    ) -> BoxStream<'static, Result<StreamResponse>> {
+        let client = self.client.clone();
+        let config = self.config.clone();
+        let system_prompt = request.system_prompt.unwrap_or_else(|| {
+            self.build_system_prompt(&request.slot.kind, request.context.as_deref())
+        });
+        let user_prompt = request.slot.prompt.clone();
+        let url = config.base_url.as_deref().unwrap_or(OPENAI_API_URL).to_string();
+
+        let api_request = ChatRequest {
+            model: config.model.clone(),
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: system_prompt,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: user_prompt,
+                },
+            ],
+            max_tokens: config.max_tokens,
+            temperature: config.temperature,
+            stream: Some(true),
+        };
+
+        let stream = async_stream::stream! {
+            let response = client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", config.api_key))
+                .header("Content-Type", "application/json")
+                .json(&api_request)
+                .send()
+                .await
+                .map_err(|e| aether_core::AetherError::NetworkError(e.to_string()));
+
+            let response = match response {
+                Ok(r) => r,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                yield Err(aether_core::AetherError::ProviderError(format!(
+                    "API error {}: {}",
+                    status, body
+                )));
+                return;
+            }
+
+            let mut stream = response.bytes_stream();
+            
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = match chunk_result {
+                    Ok(c) => c,
+                    Err(e) => {
+                        yield Err(aether_core::AetherError::NetworkError(e.to_string()));
+                        break;
+                    }
+                };
+
+                // OpenAI stream format is SSE: "data: {...}"
+                let text = String::from_utf8_lossy(&chunk);
+                for line in text.lines() {
+                    let line = line.trim();
+                    if line.is_empty() { continue; }
+                    if line == "data: [DONE]" { break; }
+                    
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        if let Ok(stream_resp) = serde_json::from_str::<ChatStreamResponse>(data) {
+                            if let Some(choice) = stream_resp.choices.first() {
+                                if let Some(content) = &choice.delta.content {
+                                    yield Ok(StreamResponse {
+                                        delta: content.clone(),
+                                        metadata: None,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        Box::pin(stream)
     }
 
     async fn health_check(&self) -> Result<bool> {

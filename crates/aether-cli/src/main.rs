@@ -36,11 +36,17 @@ enum Commands {
         /// Specific prompt override for a slot (format: slot_name=prompt)
         #[arg(long)]
         set: Vec<String>,
+
+        /// Enable streaming output (if applicable)
+        #[arg(long)]
+        stream: bool,
     },
     
     /// Initialize a new Aether configuration (Coming Soon)
     Init,
 }
+
+use futures::stream::StreamExt;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum ProviderType {
@@ -62,7 +68,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Generate { template, output, provider, model, set } => {
+        Commands::Generate { template, output, provider, model, set, stream } => {
             info!("Reading template from {:?}", template);
             
             // 1. Load Template
@@ -89,7 +95,7 @@ async fn main() -> Result<()> {
                         aether_ai::OpenAiProvider::from_env()?
                     };
                     let engine = InjectionEngine::new(p);
-                    run_generation(engine, tmpl, output).await?;
+                    run_generation(engine, tmpl, output, *stream).await?;
                 }
                 ProviderType::Anthropic => {
                     let p = if let Some(m) = model {
@@ -98,7 +104,7 @@ async fn main() -> Result<()> {
                         aether_ai::AnthropicProvider::from_env()?
                     };
                     let engine = InjectionEngine::new(p);
-                    run_generation(engine, tmpl, output).await?;
+                    run_generation(engine, tmpl, output, *stream).await?;
                 }
                 ProviderType::Gemini => {
                     let p = if let Some(m) = model {
@@ -107,19 +113,19 @@ async fn main() -> Result<()> {
                         aether_ai::GeminiProvider::from_env()?
                     };
                     let engine = InjectionEngine::new(p);
-                    run_generation(engine, tmpl, output).await?;
+                    run_generation(engine, tmpl, output, *stream).await?;
                 }
                 ProviderType::Ollama => {
                     let model_name = model.as_deref().unwrap_or("codellama");
                     let p = aether_ai::ollama(model_name);
                     let engine = InjectionEngine::new(p);
-                    run_generation(engine, tmpl, output).await?;
+                    run_generation(engine, tmpl, output, *stream).await?;
                 }
                 ProviderType::Grok => {
                     let model_name = model.as_deref().unwrap_or("grok-1");
                     let p = aether_ai::grok(model_name)?;
                     let engine = InjectionEngine::new(p);
-                    run_generation(engine, tmpl, output).await?;
+                    run_generation(engine, tmpl, output, *stream).await?;
                 }
             }
         }
@@ -131,22 +137,61 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_generation<P>(engine: InjectionEngine<P>, tmpl: Template, output: &Option<PathBuf>) -> Result<()> 
+async fn run_generation<P>(engine: InjectionEngine<P>, tmpl: Template, output: &Option<PathBuf>, stream: bool) -> Result<()> 
 where 
     P: aether_core::AiProvider + Send + Sync + 'static,
 {
-    // 4. Render
-    info!("Generating code... (this may take a while)");
-    let result = engine.render(&tmpl).await.context("Code generation failed")?;
+    if stream && tmpl.slots.len() == 1 {
+        let slot_name = tmpl.slots.keys().next().unwrap().clone();
+        info!("Streaming code generation for slot: {}", slot_name);
+        
+        let mut stream = engine.generate_slot_stream(&tmpl, &slot_name)?;
+        let mut full_code = String::new();
+        
+        use std::io::{Write, stdout};
+        let mut handle = stdout().lock();
 
-    // 5. Output
-    if let Some(out_path) = output {
-        tokio::fs::write(out_path, &result)
-            .await
-            .context("Failed to write output file")?;
-        info!("Success! Output written to {:?}", out_path);
+        while let Some(result) = stream.next().await {
+            let chunk = result?;
+            full_code.push_str(&chunk.delta);
+            
+            if output.is_none() {
+                print!("{}", chunk.delta);
+                handle.flush()?;
+            }
+        }
+        
+        if output.is_none() {
+            println!(""); // New line at end
+        }
+
+        if let Some(out_path) = output {
+            let injections = std::collections::HashMap::from([(slot_name, full_code)]);
+            let result = tmpl.render(&injections)?;
+            tokio::fs::write(out_path, &result)
+                .await
+                .context("Failed to write output file")?;
+            info!("Success! Output written to {:?}", out_path);
+        }
     } else {
-        println!("{}", result);
+        // Fallback to normal rendering if multiple slots or streaming disabled
+        if stream && tmpl.slots.len() > 1 {
+            info!("Streaming requested but multiple slots found. Falling back to normal rendering.");
+        }
+
+        // 4. Render
+        info!("Generating code... (this may take a while)");
+        let result = engine.render(&tmpl).await.context("Code generation failed")?;
+
+        // 5. Output
+        if let Some(out_path) = output {
+            tokio::fs::write(out_path, &result)
+                .await
+                .context("Failed to write output file")?;
+            info!("Success! Output written to {:?}", out_path);
+        } else {
+            println!("{}", result);
+        }
     }
     Ok(())
 }

@@ -11,6 +11,8 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
+use aether_core::provider::StreamResponse;
+use futures::stream::{BoxStream, StreamExt};
 
 const GEMINI_API_BASE: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -209,6 +211,92 @@ impl AiProvider for GeminiProvider {
             tokens_used: gemini_response.usage_metadata.map(|u| u.total_token_count),
             metadata: None,
         })
+    }
+
+    fn generate_stream(
+        &self,
+        request: GenerationRequest,
+    ) -> BoxStream<'static, Result<StreamResponse>> {
+        let client = self.client.clone();
+        let config = self.config.clone();
+        let full_prompt = self.build_prompt(&request.slot.kind, request.context.as_deref(), &request.slot.prompt);
+        
+        let api_request = GeminiRequest {
+            contents: vec![Content {
+                role: "user".to_string(),
+                parts: vec![Part { text: full_prompt }],
+            }],
+            generation_config: Some(GenerationConfig {
+                temperature: config.temperature,
+                max_output_tokens: config.max_tokens,
+            }),
+        };
+
+        let url = format!(
+            "{}/{}:streamGenerateContent?alt=sse&key={}",
+            GEMINI_API_BASE, config.model, config.api_key
+        );
+
+        let stream = async_stream::stream! {
+            let response = client
+                .post(&url)
+                .header("Content-Type", "application/json")
+                .json(&api_request)
+                .send()
+                .await
+                .map_err(|e| aether_core::AetherError::NetworkError(e.to_string()));
+
+            let response = match response {
+                Ok(r) => r,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                yield Err(aether_core::AetherError::ProviderError(format!(
+                    "API error {}: {}",
+                    status, body
+                )));
+                return;
+            }
+
+            let mut stream = response.bytes_stream();
+            
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = match chunk_result {
+                    Ok(c) => c,
+                    Err(e) => {
+                        yield Err(aether_core::AetherError::NetworkError(e.to_string()));
+                        break;
+                    }
+                };
+
+                let text = String::from_utf8_lossy(&chunk);
+                for line in text.lines() {
+                    let line = line.trim();
+                    if line.is_empty() { continue; }
+                    
+                    if let Some(event_data) = line.strip_prefix("data: ") {
+                        if let Ok(gemini_resp) = serde_json::from_str::<GeminiResponse>(event_data) {
+                            if let Some(candidate) = gemini_resp.candidates.as_ref().and_then(|c| c.first()) {
+                                if let Some(part) = candidate.content.parts.first() {
+                                    yield Ok(StreamResponse {
+                                        delta: part.text.clone(),
+                                        metadata: None,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        Box::pin(stream)
     }
 
     async fn health_check(&self) -> Result<bool> {

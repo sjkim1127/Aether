@@ -10,6 +10,8 @@ use aether_core::{
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use aether_core::provider::StreamResponse;
+use futures::stream::{BoxStream, StreamExt};
 use tracing::{debug, instrument};
 
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434/api/generate";
@@ -156,6 +158,85 @@ impl AiProvider for OllamaProvider {
             tokens_used: gen_response.eval_count,
             metadata: None,
         })
+    }
+
+    fn generate_stream(
+        &self,
+        request: GenerationRequest,
+    ) -> BoxStream<'static, Result<StreamResponse>> {
+        let client = self.client.clone();
+        let model = self.model.clone();
+        let base_url = self.base_url.clone();
+
+        let system = Some(request.system_prompt.unwrap_or_else(|| {
+            self.build_system_prompt(&request.slot.kind, request.context.as_deref())
+        }));
+
+        let api_request = GenerateRequest {
+            model: model.clone(),
+            prompt: request.slot.prompt.clone(),
+            system,
+            stream: true,
+            options: Some(GenerateOptions {
+                temperature: Some(0.7),
+                num_predict: Some(2048),
+            }),
+        };
+
+        let stream = async_stream::stream! {
+            let response = client
+                .post(&base_url)
+                .json(&api_request)
+                .send()
+                .await
+                .map_err(|e| aether_core::AetherError::NetworkError(e.to_string()));
+
+            let response = match response {
+                Ok(r) => r,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                yield Err(aether_core::AetherError::ProviderError(format!(
+                    "Ollama error {}: {}",
+                    status, body
+                )));
+                return;
+            }
+
+            let mut stream = response.bytes_stream();
+            
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = match chunk_result {
+                    Ok(c) => c,
+                    Err(e) => {
+                        yield Err(aether_core::AetherError::NetworkError(e.to_string()));
+                        break;
+                    }
+                };
+
+                let text = String::from_utf8_lossy(&chunk);
+                for line in text.lines() {
+                    let line = line.trim();
+                    if line.is_empty() { continue; }
+                    
+                    if let Ok(gen_resp) = serde_json::from_str::<GenerateResponse>(line) {
+                        yield Ok(StreamResponse {
+                            delta: gen_resp.response,
+                            metadata: None,
+                        });
+                        if gen_resp.done { break; }
+                    }
+                }
+            }
+        };
+
+        Box::pin(stream)
     }
 
     async fn health_check(&self) -> Result<bool> {

@@ -9,6 +9,8 @@ use crate::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, info, instrument};
+use futures::stream::BoxStream;
+use crate::provider::StreamResponse;
 
 /// The main engine for AI code injection.
 ///
@@ -210,6 +212,26 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
 
         let response = self.generate_with_retry(request).await?;
         Ok(response.code)
+    }
+
+    /// Generate code for a single slot as a stream.
+    pub fn generate_slot_stream(
+        &self,
+        template: &Template,
+        slot_name: &str,
+    ) -> Result<BoxStream<'static, Result<StreamResponse>>> {
+        let slot = template
+            .slots
+            .get(slot_name)
+            .ok_or_else(|| AetherError::SlotNotFound(slot_name.to_string()))?;
+
+        let request = GenerationRequest {
+            slot: slot.clone(),
+            context: Some(self.global_context.to_prompt()),
+            system_prompt: None,
+        };
+
+        Ok(self.provider.generate_stream(request))
     }
 }
 
