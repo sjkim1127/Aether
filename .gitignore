@@ -29,7 +29,14 @@ Thumbs.db
 
 # Generated files
 generated_page.html
+result.py
+test_template.txt
+
+# Logs
+*.log
+build_error*.txt
 
 # Demo folders (not part of the framework)
+/DEMO/
 /demo/
 /demo-react/
