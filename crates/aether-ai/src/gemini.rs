@@ -139,6 +139,8 @@ impl AiProvider for GeminiProvider {
     async fn generate(&self, request: GenerationRequest) -> Result<GenerationResponse> {
         debug!("Generating code with Gemini for slot: {}", request.slot.name);
 
+        let api_key = self.config.resolve_api_key().await?;
+
         // Gemini API is slightly different (no system role in v1beta easily)
         // so we verify robust prompt engineering in the user message
         let full_prompt = self.build_prompt(&request.slot.kind, request.context.as_deref(), &request.slot.prompt);
@@ -159,7 +161,7 @@ impl AiProvider for GeminiProvider {
 
         let url = format!(
             "{}/{}:generateContent?key={}",
-            GEMINI_API_BASE, self.config.model, self.config.api_key
+            GEMINI_API_BASE, self.config.model, api_key
         );
 
         let response = self
@@ -234,12 +236,20 @@ impl AiProvider for GeminiProvider {
             }),
         };
 
-        let url = format!(
-            "{}/{}:streamGenerateContent?alt=sse&key={}",
-            GEMINI_API_BASE, config.model, config.api_key
-        );
-
         let stream = async_stream::stream! {
+            let api_key = match config.resolve_api_key().await {
+                Ok(k) => k,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
+
+            let url = format!(
+                "{}/{}:streamGenerateContent?alt=sse&key={}",
+                GEMINI_API_BASE, config.model, api_key
+            );
+
             let response = client
                 .post(&url)
                 .header("Content-Type", "application/json")
@@ -302,10 +312,11 @@ impl AiProvider for GeminiProvider {
     }
 
     async fn health_check(&self) -> Result<bool> {
+        let api_key = self.config.resolve_api_key().await?;
         // Minimal check - try to get model info
          let url = format!(
             "{}/{}?key={}",
-            GEMINI_API_BASE, self.config.model, self.config.api_key
+            GEMINI_API_BASE, self.config.model, api_key
         );
 
         let response = self

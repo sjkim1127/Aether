@@ -145,6 +145,8 @@ impl AiProvider for AnthropicProvider {
     async fn generate(&self, request: GenerationRequest) -> Result<GenerationResponse> {
         debug!("Generating code with Anthropic for slot: {}", request.slot.name);
 
+        let api_key = self.config.resolve_api_key().await?;
+
         let system = Some(request.system_prompt.unwrap_or_else(|| {
             self.build_system_prompt(&request.slot.kind, request.context.as_deref())
         }));
@@ -169,7 +171,7 @@ impl AiProvider for AnthropicProvider {
         let response = self
             .client
             .post(url)
-            .header("x-api-key", &self.config.api_key)
+            .header("x-api-key", &api_key)
             .header("anthropic-version", ANTHROPIC_VERSION)
             .header("Content-Type", "application/json")
             .json(&api_request)
@@ -233,9 +235,17 @@ impl AiProvider for AnthropicProvider {
         };
 
         let stream = async_stream::stream! {
+            let api_key = match config.resolve_api_key().await {
+                Ok(k) => k,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
+
             let response = client
                 .post(&url)
-                .header("x-api-key", &config.api_key)
+                .header("x-api-key", &api_key)
                 .header("anthropic-version", ANTHROPIC_VERSION)
                 .header("Content-Type", "application/json")
                 .json(&api_request)

@@ -141,6 +141,8 @@ impl AiProvider for OpenAiProvider {
     async fn generate(&self, request: GenerationRequest) -> Result<GenerationResponse> {
         debug!("Generating code with OpenAI for slot: {}", request.slot.name);
 
+        let api_key = self.config.resolve_api_key().await?;
+
         let system_prompt = request.system_prompt.unwrap_or_else(|| {
             self.build_system_prompt(&request.slot.kind, request.context.as_deref())
         });
@@ -170,7 +172,7 @@ impl AiProvider for OpenAiProvider {
         let response = self
             .client
             .post(url)
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .json(&api_request)
             .send()
@@ -244,9 +246,17 @@ impl AiProvider for OpenAiProvider {
         };
 
         let stream = async_stream::stream! {
+            let api_key = match config.resolve_api_key().await {
+                Ok(k) => k,
+                Err(e) => {
+                    yield Err(e);
+                    return;
+                }
+            };
+
             let response = client
                 .post(&url)
-                .header("Authorization", format!("Bearer {}", config.api_key))
+                .header("Authorization", format!("Bearer {}", api_key))
                 .header("Content-Type", "application/json")
                 .json(&api_request)
                 .send()

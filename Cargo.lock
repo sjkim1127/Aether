@@ -58,6 +58,7 @@ dependencies = [
  "futures",
  "handlebars",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "serde_yaml",

@@ -146,6 +146,7 @@ pub struct ProviderConfig {
     pub base_url: Option<String>,
     pub max_tokens: Option<u32>,
     pub temperature: Option<f64>,
+    pub api_key_url: Option<String>,
 }
 
 /// Main Aether engine for JavaScript.
@@ -160,6 +161,7 @@ pub struct AetherEngine {
     heal: bool,
     cache: bool,
     toon: bool,
+    api_key_url: Option<String>,
 }
 
 #[napi]
@@ -177,6 +179,7 @@ impl AetherEngine {
             heal: false,
             cache: false,
             toon: false,
+            api_key_url: None,
         })
     }
 
@@ -193,6 +196,7 @@ impl AetherEngine {
             heal: false,
             cache: false,
             toon: false,
+            api_key_url: None,
         })
     }
 
@@ -209,6 +213,7 @@ impl AetherEngine {
             heal: false,
             cache: false,
             toon: false,
+            api_key_url: None,
         })
     }
 
@@ -225,6 +230,7 @@ impl AetherEngine {
             heal: false,
             cache: false,
             toon: false,
+            api_key_url: None,
         })
     }
 
@@ -241,6 +247,7 @@ impl AetherEngine {
             heal: false,
             cache: false,
             toon: false,
+            api_key_url: None,
         })
     }
 
@@ -248,6 +255,12 @@ impl AetherEngine {
     #[napi]
     pub fn set_api_key(&mut self, key: String) {
         self.api_key = Some(key);
+    }
+
+    /// Set the API key URL for remote resolution.
+    #[napi]
+    pub fn set_api_key_url(&mut self, url: String) {
+        self.api_key_url = Some(url);
     }
 
     /// Set context for generation.
@@ -316,9 +329,13 @@ impl AetherEngine {
             ProviderType::OpenAI => {
                 let api_key = self.api_key.clone()
                     .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-                    .ok_or_else(|| Error::from_reason("OPENAI_API_KEY not set"))?;
+                    .unwrap_or_default();
                 
-                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                let mut config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                if let Some(ref url) = self.api_key_url {
+                    config = config.with_api_key_url(url);
+                }
+
                 let provider = OpenAiProvider::new(config)
                     .map_err(|e| Error::from_reason(e.to_string()))?;
                 
@@ -327,9 +344,13 @@ impl AetherEngine {
             ProviderType::Anthropic => {
                 let api_key = self.api_key.clone()
                     .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-                    .ok_or_else(|| Error::from_reason("ANTHROPIC_API_KEY not set"))?;
+                    .unwrap_or_default();
                 
-                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                let mut config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                if let Some(ref url) = self.api_key_url {
+                    config = config.with_api_key_url(url);
+                }
+
                 let provider = AnthropicProvider::new(config)
                     .map_err(|e| Error::from_reason(e.to_string()))?;
                 
@@ -338,9 +359,13 @@ impl AetherEngine {
             ProviderType::Gemini => {
                 let api_key = self.api_key.clone()
                     .or_else(|| std::env::var("GOOGLE_API_KEY").ok())
-                    .ok_or_else(|| Error::from_reason("GOOGLE_API_KEY (GEMINI) not set"))?;
+                    .unwrap_or_default();
                 
-                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                let mut config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                if let Some(ref url) = self.api_key_url {
+                    config = config.with_api_key_url(url);
+                }
+
                 let provider = aether_ai::GeminiProvider::new(config)
                     .map_err(|e| Error::from_reason(e.to_string()))?;
                 self.render_with_provider(template, provider).await
@@ -352,10 +377,14 @@ impl AetherEngine {
             ProviderType::Grok => {
                 let api_key = self.api_key.clone()
                     .or_else(|| std::env::var("XAI_API_KEY").ok())
-                    .ok_or_else(|| Error::from_reason("XAI_API_KEY not set"))?;
+                    .unwrap_or_default();
                 
-                let config = aether_core::ProviderConfig::new(&api_key, &self.model)
+                let mut config = aether_core::ProviderConfig::new(&api_key, &self.model)
                     .with_base_url("https://api.x.ai/v1/chat/completions");
+
+                if let Some(ref url) = self.api_key_url {
+                    config = config.with_api_key_url(url);
+                }
 
                 let provider = OpenAiProvider::new(config)
                     .map_err(|e| Error::from_reason(e.to_string()))?;

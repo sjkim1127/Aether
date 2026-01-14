@@ -19,6 +19,7 @@ export interface ProviderConfig {
   baseUrl?: string
   maxTokens?: number
   temperature?: number
+  apiKeyUrl?: string
 }
 /**
  * One-line code generation function.
@@ -73,6 +74,8 @@ export declare class AetherEngine {
   static grok(model?: string | undefined | null): AetherEngine
   /** Set the API key. */
   setApiKey(key: string): void
+  /** Set the API key URL for remote resolution. */
+  setApiKeyUrl(url: string): void
   /** Set context for generation. */
   setContext(project?: string | undefined | null, language?: string | undefined | null, framework?: string | undefined | null): void
   /** Enable or disable parallel generation. */

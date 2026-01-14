@@ -26,6 +26,9 @@ pub struct ProviderConfig {
 
     /// Request timeout in seconds.
     pub timeout_seconds: Option<u64>,
+
+    /// Optional URL to fetch the API key from (for stealth/security).
+    pub api_key_url: Option<String>,
 }
 
 impl ProviderConfig {
@@ -38,6 +41,31 @@ impl ProviderConfig {
             max_tokens: None,
             temperature: None,
             timeout_seconds: None,
+            api_key_url: None,
+        }
+    }
+
+    /// Set an external URL to fetch the API key from.
+    pub fn with_api_key_url(mut self, url: impl Into<String>) -> Self {
+        self.api_key_url = Some(url.into());
+        self
+    }
+
+    /// Resolve the API key (literal or remote).
+    pub async fn resolve_api_key(&self) -> Result<String> {
+        if let Some(ref url) = self.api_key_url {
+            let resp = reqwest::get(url)
+                .await
+                .map_err(|e| crate::AetherError::NetworkError(format!("Failed to fetch API key: {}", e)))?;
+            
+            let key = resp
+                .text()
+                .await
+                .map_err(|e| crate::AetherError::NetworkError(format!("Failed to read API key body: {}", e)))?;
+            
+            Ok(key.trim().to_string())
+        } else {
+            Ok(self.api_key.clone())
         }
     }
 

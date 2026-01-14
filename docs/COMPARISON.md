@@ -10,8 +10,9 @@ Here is why Aether is the superior choice for production-grade AI injection.
 | :--- | :--- | :--- |
 | **Code Structure** | String concatenation & messy Regex parsing. | **Template & Slot-based**. Precise injection. |
 | **Reliability** | "Fire and forget." No way to know if code works. | **Self-Healing**. Auto-validates & fixes code loops. |
-| **Performance** | Repeated calls for the same prompt cost money/time. | **Semantic Caching**. 0.1ms responses for similar tasks. |
-| **Token Cost** | Naive prompt sending. High overhead. | **TOON Protocol**. Optimized for minimal token usage. |
+| **Performance** | Repeated calls cost money/time. | **Semantic Caching**. 0.1ms responses. |
+| **Security** | API keys must be in env/source. | **Remote Key Resolution**. Fetch keys on-the-fly. |
+| **Token Cost** | Naive prompt sending. | **TOON Protocol**. Optimized for minimal tokens. |
 | **Developer DX** | Handling multiple SDKs (OpenAI, Claude, etc). | **Uniform Interface**. Switch providers with one line. |
 | **Creativity** | Global temperature for the whole response. | **Per-Slot Temperature**. Creative text + strict logic. |
 
@@ -57,8 +58,10 @@ Raw APIs frequently hallucinate non-existent libraries or forget a semicolon. Wi
 ### 2. The "Latency" Tax
 Calling an LLM takes seconds. If 5 users ask for the same "Sorting Algorithm explanation," raw APIs charge you 5 times and make 5 users wait. Aether's **Semantic Cache** serves it from local memory after the first call.
 
-### 3. The "Vendor Lock-in" Tax
-Switching from OpenAI to Claude with raw SDKs requires rewriting your networking and error-handling logic. In Aether, it's a simple factory swap: `AetherEngine.openai()` -> `AetherEngine.anthropic()`.
+### 3. The "Anti-Reversing" Edge
+If you ship a binary with an API key, it's trivial to extract. With Aether, you can use `setApiKeyUrl("https://your-secure-server.com/resolve")`. Your binary contains no keys, and the AI generates the critical code at runtime, making static and dynamic analysis almost impossible.
+
+### 4. The "Vendor Lock-in" Tax
 
 ---
 
