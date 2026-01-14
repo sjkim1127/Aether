@@ -151,15 +151,55 @@ const engine = AetherEngine.ollama("codellama");
 
 ---
 
+## Google Gemini
+
+Access to Google's powerful Gemini models with large context windows.
+
+### Available Models
+
+| Model | ID | Best For |
+|-------|----|----------|
+| Gemini 1.5 Pro | `gemini-1.5-pro` | Best quality, huge context (default) |
+| Gemini 1.5 Flash | `gemini-1.5-flash` | Fast, cost-effective |
+
+### Configuration
+
+**Rust:**
+```rust
+use aether_ai::GeminiProvider;
+
+// From environment (GOOGLE_API_KEY)
+let provider = GeminiProvider::from_env()?;
+
+// With specific model
+let provider = aether_ai::gemini("gemini-1.5-flash")?;
+```
+
+**Node.js:**
+```javascript
+const { AetherEngine } = require('aether-codegen');
+
+// Not yet supported in Node.js binding (coming soon)
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_API_KEY` | Your Google API key |
+| `GEMINI_MODEL` | Default model |
+
+---
+
 ## Comparison
 
-| Feature | OpenAI | Anthropic | Ollama |
-|---------|--------|-----------|--------|
-| Quality | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
-| Speed | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐ |
-| Cost | Paid | Paid | Free |
-| Privacy | Cloud | Cloud | Local |
-| Offline | ❌ | ❌ | ✅ |
+| Feature | OpenAI | Anthropic | Gemini | Ollama |
+|---------|--------|-----------|--------|--------|
+| Quality | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
+| Speed | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ |
+| Cost | Paid | Paid | Free Tier | Free |
+| Privacy | Cloud | Cloud | Cloud | Local |
+| Offline | ❌ | ❌ | ❌ | ✅ |
 
 ## Custom Providers
 
