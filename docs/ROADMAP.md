@@ -36,6 +36,9 @@ Make AI-powered code generation accessible to every developer, for every languag
 | **Caching Layer** | 🔲 Planned | Medium |
 | In-memory cache | 🔲 Planned | Medium |
 | Redis/Disk cache support | 🔲 Planned | Low |
+| **AI Protocol Optimization** | 🔲 Planned | Medium |
+| TOON Format Support | 🔲 Planned | High |
+| Token Usage Optimization | 🔲 Planned | Medium |
 
 ### v0.3.0 - Language Bindings
 
