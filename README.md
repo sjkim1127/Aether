@@ -13,15 +13,14 @@ For a detailed comparison on why Aether is superior to raw API calls, see [Aethe
 
 ### Key Features
 
-- 🎯 **One-line AI calls** - Generate code with a single macro invocation
-- 🧪 **Self-Healing (Alpha)** - Automatic error detection and self-correction loop
-- 🧠 **Semantic Caching** - Local response caching using embeddings to save costs
-- � **TOON Protocol** - Token-Oriented Object Notation for extreme token efficiency
-- 📡 **Live Streaming** - Real-time code generation for interactive experiences
-- 🔌 **Expanded Providers** - OpenAI, Anthropic, Google Gemini, Ollama, and xAI Grok
-- ⚡ **Parallel Generation** - Concurrent slot processing for maximum speed
-- 🛡️ **Validation & Types** - Integrated constraints and type-safe injection
-- 🧩 **Native Node.js** - High-performance C++ bindings for JavaScript ecosystem
+- ✨ **Aether Shield (Anti-Reversing)**: Body-less functions that execute AI-generated scripts in a secure sandbox at runtime.
+- 🧪 **Self-Healing (Alpha)**: Automatic error detection and self-correction loop for "guaranteed" valid code.
+- 🧠 **Semantic Caching**: Local vector-based caching that serves sub-millisecond responses for repeated tasks.
+- 🚀 **TOON Protocol**: Token-Oriented Object Notation for extreme token efficiency and AI "understanding."
+- 📡 **Live Streaming**: Real-time code generation for interactive end-user experiences.
+- 🔌 **Universal Providers**: Native support for OpenAI, Anthropic, Gemini, Ollama, and xAI Grok.
+- ⚡ **Parallel Generation**: Concurrent slot processing for maximum rendering speed.
+- 🧩 **Native Bindings**: High-performance C++ bindings for the Node.js / TypeScript ecosystem.
 
 ## Installation
 
@@ -232,6 +231,24 @@ let template = Template::new("...")
 ```
 
 See [examples/advanced_workflow.rs](./examples/advanced_workflow.rs) for a complete implementation.
+
+### 🛡️ Aether Shield: The Hacker's Nightmare
+
+Protect your critical business logic by making it **non-existent** in the binary. Use the `#[aether_secure]` macro to fetch and execute logic at runtime.
+
+```rust
+use aether_macros::aether_secure;
+
+#[aether_secure(prompt = "Calculate premium discount based on user tier")]
+async fn get_discount(tier: i64) -> i64;
+
+// At runtime:
+// 1. Aether calls AI for a Rhai script.
+// 2. The script is executed in a secure sandbox.
+// 3. Result is returned. No local logic to reverse engineer!
+```
+
+See [examples/secure_logic.rs](./examples/secure_logic.rs) for a live demo.
 
 ## Environment Variables
 

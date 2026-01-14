@@ -32,6 +32,7 @@ pub mod engine;
 pub mod validation;
 pub mod cache;
 pub mod toon;
+pub mod runtime;
 
 pub use error::{AetherError, Result};
 pub use template::Template;
@@ -39,6 +40,7 @@ pub use slot::{Slot, SlotKind};
 pub use provider::{AiProvider, ProviderConfig};
 pub use context::InjectionContext;
 pub use engine::InjectionEngine;
+pub use runtime::AetherRuntime;
 
 /// Re-export commonly used types
 pub mod prelude {

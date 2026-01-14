@@ -13,10 +13,14 @@ version = "0.1.1"
 edition = "2021"
 authors = ["Aether Team"]
 license = "MIT"
-repository = "https://github.com/aether/aether-codegen"
-description = "AI-powered dynamic code injection framework"
+repository = "https://github.com/sjkim1127/Aether"
+description = "AI-powered dynamic code injection framework with Anti-Reversing Shield"
 
 [workspace.dependencies]
+# ... (existing)
+aether-core = { path = "crates/aether-core", version = "0.1.1" }
+aether-ai = { path = "crates/aether-ai", version = "0.1.1" }
+aether-macros = { path = "crates/aether-macros", version = "0.1.1" }
 # Core dependencies
 tokio = { version = "1.49", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -40,7 +44,4 @@ proc-macro2 = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
-# Workspace crates
-aether-core = { path = "crates/aether-core" }
-aether-ai = { path = "crates/aether-ai" }
-aether-macros = { path = "crates/aether-macros" }
+
