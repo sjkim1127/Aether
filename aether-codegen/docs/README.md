@@ -19,6 +19,7 @@ Welcome to the Aether Codegen documentation. This directory contains comprehensi
 
 ### Project Info
 - [Changelog](./CHANGELOG.md)
+- [Roadmap](./ROADMAP.md)
 - [Contributing](./CONTRIBUTING.md)
 - [Architecture](./architecture.md)
 
