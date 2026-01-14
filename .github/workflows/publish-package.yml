@@ -1,0 +1,42 @@
+name: Publish to GitHub Packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@sjkim1127'
+          
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Install dependencies
+        run: |
+          cd crates/aether-node
+          npm install
+          
+      - name: Build native module
+        run: |
+          cd crates/aether-node
+          npm run build
+          
+      - name: Publish to GitHub Packages
+        run: |
+          cd crates/aether-node
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,14 +1,17 @@
 {
-    "name": "aether-codegen",
+    "name": "@sjkim1127/aether-codegen",
     "version": "0.1.1",
     "description": "AI-powered dynamic code injection framework - Generate code with AI using templates",
     "main": "index.js",
     "types": "index.d.ts",
     "author": "Aether Team",
     "license": "MIT",
+    "publishConfig": {
+        "registry": "https://npm.pkg.github.com"
+    },
     "repository": {
         "type": "git",
-        "url": "https://github.com/sjkim1127/aether-codegen"
+        "url": "https://github.com/sjkim1127/Aether"
     },
     "keywords": [
         "ai",
