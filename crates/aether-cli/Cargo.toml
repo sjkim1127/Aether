@@ -1,0 +1,28 @@
+[package]
+name = "aether-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Command line interface for Aether Codegen"
+
+[dependencies]
+aether-core = { path = "../aether-core" }
+aether-ai = { path = "../aether-ai" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# CLI interface
+clap = { version = "4.4", features = ["derive"] }
+
+# Environment & Logging
+dotenvy = "0.15"
+env_logger = "0.10"
+log = "0.4"
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = "1.0"
+thiserror = { workspace = true }

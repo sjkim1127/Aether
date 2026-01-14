@@ -5,6 +5,7 @@ members = [
     "crates/aether-ai",
     "crates/aether-macros",
     "crates/aether-node",
+    "crates/aether-cli",
 ]
 
 [workspace.package]
