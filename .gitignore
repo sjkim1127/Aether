@@ -1,6 +1,5 @@
 # Rust
 /target/
-Cargo.lock
 
 # Node.js
 node_modules/
@@ -30,3 +29,7 @@ Thumbs.db
 
 # Generated files
 generated_page.html
+
+# Demo folders (not part of the framework)
+/demo-site/
+/demo-react/
