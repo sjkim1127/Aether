@@ -40,3 +40,6 @@ build_error*.txt
 /DEMO/
 /demo/
 /demo-react/
+
+# Deployment Scripts
+scripts/
