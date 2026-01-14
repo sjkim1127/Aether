@@ -148,10 +148,11 @@ impl AiProvider for GeminiProvider {
             parts: vec![Part { text: full_prompt }],
         }];
 
+        let temperature = request.slot.temperature.or(self.config.temperature);
         let api_request = GeminiRequest {
             contents,
             generation_config: Some(GenerationConfig {
-                temperature: self.config.temperature,
+                temperature,
                 max_output_tokens: self.config.max_tokens,
             }),
         };
@@ -221,13 +222,14 @@ impl AiProvider for GeminiProvider {
         let config = self.config.clone();
         let full_prompt = self.build_prompt(&request.slot.kind, request.context.as_deref(), &request.slot.prompt);
         
+        let temperature = request.slot.temperature.or(config.temperature);
         let api_request = GeminiRequest {
             contents: vec![Content {
                 role: "user".to_string(),
                 parts: vec![Part { text: full_prompt }],
             }],
             generation_config: Some(GenerationConfig {
-                temperature: config.temperature,
+                temperature,
                 max_output_tokens: config.max_tokens,
             }),
         };

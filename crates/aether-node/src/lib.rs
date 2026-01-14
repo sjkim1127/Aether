@@ -59,10 +59,14 @@ impl Template {
         self.inner.name = name;
     }
 
-    /// Add a slot with a prompt.
+    /// Add a slot with a prompt and optional temperature.
     #[napi]
-    pub fn set_slot(&mut self, name: String, prompt: String) {
-        self.inner = self.inner.clone().with_slot(name, prompt);
+    pub fn set_slot(&mut self, name: String, prompt: String, temperature: Option<f64>) {
+        let mut slot = CoreSlot::new(name, prompt);
+        if let Some(temp) = temperature {
+            slot.temperature = Some(temp as f32);
+        }
+        self.inner = self.inner.clone().configure_slot(slot);
     }
 
     /// Get all slot names in this template.
@@ -114,6 +118,12 @@ impl Slot {
     pub fn set_max_lines(&mut self, max: u32) {
         let constraints = self.inner.constraints.get_or_insert_with(Default::default);
         constraints.max_lines = Some(max as usize);
+    }
+
+    /// Set temperature for this slot.
+    #[napi]
+    pub fn set_temperature(&mut self, temp: f64) {
+        self.inner.temperature = Some(temp as f32);
     }
 }
 

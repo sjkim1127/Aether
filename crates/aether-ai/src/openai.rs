@@ -156,11 +156,12 @@ impl AiProvider for OpenAiProvider {
             },
         ];
 
+        let temperature = request.slot.temperature.or(self.config.temperature);
         let api_request = ChatRequest {
             model: self.config.model.clone(),
             messages,
             max_tokens: self.config.max_tokens,
-            temperature: self.config.temperature,
+            temperature,
             stream: None,
         };
 
@@ -224,6 +225,7 @@ impl AiProvider for OpenAiProvider {
         let user_prompt = request.slot.prompt.clone();
         let url = config.base_url.as_deref().unwrap_or(OPENAI_API_URL).to_string();
 
+        let temperature = request.slot.temperature.or(config.temperature);
         let api_request = ChatRequest {
             model: config.model.clone(),
             messages: vec![
@@ -237,7 +239,7 @@ impl AiProvider for OpenAiProvider {
                 },
             ],
             max_tokens: config.max_tokens,
-            temperature: config.temperature,
+            temperature,
             stream: Some(true),
         };
 

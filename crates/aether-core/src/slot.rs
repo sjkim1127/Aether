@@ -24,6 +24,9 @@ pub struct Slot {
 
     /// Default value if AI generation fails.
     pub default: Option<String>,
+
+    /// Specific temperature override for this slot (0.0 - 2.0).
+    pub temperature: Option<f32>,
 }
 
 /// The kind of slot determines how code is generated.
@@ -99,7 +102,14 @@ impl Slot {
             constraints: None,
             required: true,
             default: None,
+            temperature: None,
         }
+    }
+
+    /// Set a specific temperature for this slot.
+    pub fn with_temperature(mut self, temp: f32) -> Self {
+        self.temperature = Some(temp.clamp(0.0, 2.0));
+        self
     }
 
     /// Set the slot kind.

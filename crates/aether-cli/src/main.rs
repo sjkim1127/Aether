@@ -41,6 +41,10 @@ enum Commands {
         #[arg(long)]
         stream: bool,
 
+        /// Specific temperature for a slot (format: slot_name=temperature)
+        #[arg(long)]
+        temp: Vec<String>,
+
         /// Enable self-healing (auto-validate and fix code)
         #[arg(long)]
         heal: bool,
@@ -82,7 +86,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Generate { template, output, provider, model, set, stream, heal, cache, toon } => {
+        Commands::Generate { template, output, provider, model, set, stream, heal, cache, toon, temp } => {
             info!("Reading template from {:?}", template);
             
             // 1. Load Template
@@ -93,8 +97,18 @@ async fn main() -> Result<()> {
             // 2. Apply prompt overrides
             let mut tmpl = tmpl;
             for override_str in set {
-                if let Some((slot, prompt)) = override_str.split_once('=') {
-                     tmpl = tmpl.with_slot(slot, prompt);
+                if let Some((slot_name, prompt)) = override_str.split_once('=') {
+                     tmpl = tmpl.with_slot(slot_name, prompt);
+                }
+            }
+            
+            for temp_str in temp {
+                if let Some((slot_name, temp_val)) = temp_str.split_once('=') {
+                    if let Ok(t) = temp_val.parse::<f32>() {
+                        if let Some(slot) = tmpl.slots.get(slot_name).cloned() {
+                            tmpl = tmpl.configure_slot(slot.with_temperature(t));
+                        }
+                    }
                 }
             }
 

@@ -41,8 +41,8 @@ export declare class Template {
   constructor(content: string)
   /** Set the template name. */
   setName(name: string): void
-  /** Add a slot with a prompt. */
-  setSlot(name: string, prompt: string): void
+  /** Add a slot with a prompt and optional temperature. */
+  setSlot(name: string, prompt: string, temperature?: number | undefined | null): void
   /** Get all slot names in this template. */
   getSlotNames(): Array<string>
   /** Get the template content. */
@@ -56,6 +56,8 @@ export declare class Slot {
   setKind(kind: string): void
   /** Set maximum lines constraint. */
   setMaxLines(max: number): void
+  /** Set temperature for this slot. */
+  setTemperature(temp: number): void
 }
 /** Main Aether engine for JavaScript. */
 export declare class AetherEngine {

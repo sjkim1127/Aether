@@ -163,7 +163,7 @@ let provider = aether_ai::grok("grok-1")?;
 ```rust
 use aether_ai::OllamaProvider;
 let provider = OllamaProvider::new("codellama");
-```
+``` 
 
 ## Advanced Usage
 
@@ -211,6 +211,25 @@ let engine = InjectionEngine::new(provider)
 let template = Template::new("{{AI:header}} {{AI:content}} {{AI:footer}}");
 let result = engine.render(&template).await?; // All slots generated in parallel
 ```
+
+### Advanced Workflow (Healing + Cache + TOON)
+
+For complex use cases requiring high reliability and cost-efficiency:
+
+```rust
+let engine = InjectionEngine::new(provider)
+    .with_cache(SemanticCache::new()?) 
+    .with_validator(RustValidator)    
+    .with_toon(true);
+
+let template = Template::new("...")
+    .configure_slot(
+        Slot::new("logic", "Math logic")
+            .with_temperature(0.0) // Be strict
+    );
+```
+
+See [examples/advanced_workflow.rs](./examples/advanced_workflow.rs) for a complete implementation.
 
 ## Environment Variables
 
@@ -282,11 +301,16 @@ npm run build
 
 See the [examples](./examples) directory for more usage patterns:
 
+- `advanced_workflow.rs` - Full suite of premium features (Cache, Heal, TOON)
 - `basic_web.rs` - Basic web page generation
 - `one_line.rs` - One-line code generation
 - `local_ollama.rs` - Local AI with Ollama
 
-## Contributing
+## Documentation
+
+- [Architecture Overview](./docs/ARCHITECTURE.md) - How Aether works internally
+- [Changelog](./docs/CHANGELOG.md) - Recent updates and version history
+- [API Reference (Node.js)](./crates/aether-node/index.d.ts) - TypeScript definitions
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 

@@ -118,13 +118,14 @@ impl AiProvider for OllamaProvider {
             self.build_system_prompt(&request.slot.kind, request.context.as_deref())
         }));
 
+        let temperature = request.slot.temperature.unwrap_or(0.7);
         let api_request = GenerateRequest {
             model: self.model.clone(),
             prompt: request.slot.prompt.clone(),
             system,
             stream: false,
             options: Some(GenerateOptions {
-                temperature: Some(0.7),
+                temperature: Some(temperature),
                 num_predict: Some(2048),
             }),
         };
@@ -172,13 +173,14 @@ impl AiProvider for OllamaProvider {
             self.build_system_prompt(&request.slot.kind, request.context.as_deref())
         }));
 
+        let temperature = request.slot.temperature.unwrap_or(0.7);
         let api_request = GenerateRequest {
             model: model.clone(),
             prompt: request.slot.prompt.clone(),
             system,
             stream: true,
             options: Some(GenerateOptions {
-                temperature: Some(0.7),
+                temperature: Some(temperature),
                 num_predict: Some(2048),
             }),
         };

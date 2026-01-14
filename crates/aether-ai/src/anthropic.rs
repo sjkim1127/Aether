@@ -154,12 +154,13 @@ impl AiProvider for AnthropicProvider {
             content: request.slot.prompt.clone(),
         }];
 
+        let temperature = request.slot.temperature.or(self.config.temperature);
         let api_request = MessageRequest {
             model: self.config.model.clone(),
             max_tokens: self.config.max_tokens.unwrap_or(4096),
             system,
             messages,
-            temperature: self.config.temperature,
+            temperature,
             stream: None,
         };
 
@@ -218,6 +219,7 @@ impl AiProvider for AnthropicProvider {
         let user_prompt = request.slot.prompt.clone();
         let url = config.base_url.as_deref().unwrap_or(ANTHROPIC_API_URL).to_string();
 
+        let temperature = request.slot.temperature.or(config.temperature);
         let api_request = MessageRequest {
             model: config.model.clone(),
             max_tokens: config.max_tokens.unwrap_or(4096),
@@ -226,7 +228,7 @@ impl AiProvider for AnthropicProvider {
                 role: "user".to_string(),
                 content: user_prompt,
             }],
-            temperature: config.temperature,
+            temperature,
             stream: Some(true),
         };
 
