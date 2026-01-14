@@ -40,6 +40,18 @@ enum Commands {
         /// Enable streaming output (if applicable)
         #[arg(long)]
         stream: bool,
+
+        /// Enable self-healing (auto-validate and fix code)
+        #[arg(long)]
+        heal: bool,
+
+        /// Enable semantic caching to reduce costs
+        #[arg(long)]
+        cache: bool,
+
+        /// Use TOON format for context optimization
+        #[arg(long)]
+        toon: bool,
     },
     
     /// Initialize a new Aether configuration (Coming Soon)
@@ -47,6 +59,8 @@ enum Commands {
 }
 
 use futures::stream::StreamExt;
+use aether_core::validation::RustValidator;
+use aether_core::cache::SemanticCache;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum ProviderType {
@@ -68,7 +82,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Generate { template, output, provider, model, set, stream } => {
+        Commands::Generate { template, output, provider, model, set, stream, heal, cache, toon } => {
             info!("Reading template from {:?}", template);
             
             // 1. Load Template
@@ -94,7 +108,10 @@ async fn main() -> Result<()> {
                     } else {
                         aether_ai::OpenAiProvider::from_env()?
                     };
-                    let engine = InjectionEngine::new(p);
+                    let mut engine = InjectionEngine::new(p);
+                    if *heal { engine = engine.with_validator(RustValidator); }
+                    if *toon { engine = engine.with_toon(true); }
+                    if *cache { engine = engine.with_cache(SemanticCache::new()?); }
                     run_generation(engine, tmpl, output, *stream).await?;
                 }
                 ProviderType::Anthropic => {
@@ -103,7 +120,10 @@ async fn main() -> Result<()> {
                     } else {
                         aether_ai::AnthropicProvider::from_env()?
                     };
-                    let engine = InjectionEngine::new(p);
+                    let mut engine = InjectionEngine::new(p);
+                    if *heal { engine = engine.with_validator(RustValidator); }
+                    if *toon { engine = engine.with_toon(true); }
+                    if *cache { engine = engine.with_cache(SemanticCache::new()?); }
                     run_generation(engine, tmpl, output, *stream).await?;
                 }
                 ProviderType::Gemini => {
@@ -112,19 +132,28 @@ async fn main() -> Result<()> {
                     } else {
                         aether_ai::GeminiProvider::from_env()?
                     };
-                    let engine = InjectionEngine::new(p);
+                    let mut engine = InjectionEngine::new(p);
+                    if *heal { engine = engine.with_validator(RustValidator); }
+                    if *toon { engine = engine.with_toon(true); }
+                    if *cache { engine = engine.with_cache(SemanticCache::new()?); }
                     run_generation(engine, tmpl, output, *stream).await?;
                 }
                 ProviderType::Ollama => {
                     let model_name = model.as_deref().unwrap_or("codellama");
                     let p = aether_ai::ollama(model_name);
-                    let engine = InjectionEngine::new(p);
+                    let mut engine = InjectionEngine::new(p);
+                    if *heal { engine = engine.with_validator(RustValidator); }
+                    if *toon { engine = engine.with_toon(true); }
+                    if *cache { engine = engine.with_cache(SemanticCache::new()?); }
                     run_generation(engine, tmpl, output, *stream).await?;
                 }
                 ProviderType::Grok => {
                     let model_name = model.as_deref().unwrap_or("grok-1");
                     let p = aether_ai::grok(model_name)?;
-                    let engine = InjectionEngine::new(p);
+                    let mut engine = InjectionEngine::new(p);
+                    if *heal { engine = engine.with_validator(RustValidator); }
+                    if *toon { engine = engine.with_toon(true); }
+                    if *cache { engine = engine.with_cache(SemanticCache::new()?); }
                     run_generation(engine, tmpl, output, *stream).await?;
                 }
             }

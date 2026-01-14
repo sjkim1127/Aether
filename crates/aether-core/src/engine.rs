@@ -11,6 +11,9 @@ use std::sync::Arc;
 use tracing::{debug, info, instrument};
 use futures::stream::BoxStream;
 use crate::provider::StreamResponse;
+use crate::validation::{Validator, ValidationResult};
+use crate::cache::Cache;
+use crate::toon::Toon;
 
 /// The main engine for AI code injection.
 ///
@@ -31,6 +34,15 @@ use crate::provider::StreamResponse;
 pub struct InjectionEngine<P: AiProvider> {
     /// The AI provider for code generation.
     provider: Arc<P>,
+    
+    /// Optional validator for self-healing.
+    validator: Option<Arc<dyn Validator>>,
+
+    /// Optional cache for performance/cost optimization.
+    cache: Option<Arc<dyn Cache>>,
+
+    /// Whether to use TOON format for context injection.
+    use_toon: bool,
 
     /// Global context applied to all generations.
     global_context: InjectionContext,
@@ -47,10 +59,31 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
     pub fn new(provider: P) -> Self {
         Self {
             provider: Arc::new(provider),
+            validator: None,
+            cache: None,
+            use_toon: false,
             global_context: InjectionContext::default(),
             parallel: true,
             max_retries: 2,
         }
+    }
+
+    /// Set the cache for performance optimization.
+    pub fn with_cache(mut self, cache: impl Cache + 'static) -> Self {
+        self.cache = Some(Arc::new(cache));
+        self
+    }
+
+    /// Enable or disable TOON format for context.
+    pub fn with_toon(mut self, enabled: bool) -> Self {
+        self.use_toon = enabled;
+        self
+    }
+
+    /// Set the validator for self-healing.
+    pub fn with_validator(mut self, validator: impl Validator + 'static) -> Self {
+        self.validator = Some(Arc::new(validator));
+        self
     }
 
     /// Set the global context.
@@ -97,6 +130,7 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
     }
 
     /// Generate code for all slots in a template.
+    /// Generate code for all slots in a template.
     async fn generate_all(
         &self,
         template: &Template,
@@ -104,11 +138,21 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
     ) -> Result<HashMap<String, String>> {
         let mut injections = HashMap::new();
 
-        let context_prompt = if let Some(ref ctx) = extra_context {
+        let context_prompt = if self.use_toon {
+            // TOON optimization
+            let toon_ctx = Toon::serialize(&serde_json::to_value(&self.global_context).unwrap_or(serde_json::json!({})));
+            format!("[CONTEXT:TOON]\n{}\n", toon_ctx)
+        } else if let Some(ref ctx) = extra_context {
             format!("{}\n{}", self.global_context.to_prompt(), ctx.to_prompt())
         } else {
             self.global_context.to_prompt()
         };
+
+        let mut context_prompt = context_prompt;
+        // If self-healing is enabled, encourage AI to write unit tests
+        if self.validator.is_some() {
+            context_prompt.push_str("\n\nIMPORTANT: Include a Rust `#[cfg(test)] mod tests { ... }` block with at least one unit test to verify your code. The system will automatically run these tests to validate your output.");
+        }
 
         if self.parallel {
             injections = self
@@ -144,6 +188,8 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
 
         for (name, slot) in template.slots.clone() {
             let provider = Arc::clone(&self.provider);
+            let validator = self.validator.clone();
+            let cache = self.cache.clone();
             let context = context_prompt.to_string();
             let max_retries = self.max_retries;
 
@@ -154,7 +200,7 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
                     system_prompt: None,
                 };
 
-                let response = Self::generate_with_retry_static(&provider, request, max_retries).await?;
+                let response = Self::generate_with_healing_static(&provider, &validator, &cache, request, max_retries).await?;
                 Ok::<_, AetherError>((name, response.code))
             });
         }
@@ -168,33 +214,96 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
         Ok(injections)
     }
 
-    /// Generate with retry logic.
+    /// Generate with self-healing logic.
     async fn generate_with_retry(&self, request: GenerationRequest) -> Result<GenerationResponse> {
-        Self::generate_with_retry_static(&self.provider, request, self.max_retries).await
+        Self::generate_with_healing_static(&self.provider, &self.validator, &self.cache, request, self.max_retries).await
     }
 
-    /// Static version of generate_with_retry for use in spawned tasks.
-    async fn generate_with_retry_static(
+    /// Static version of generate with self-healing support.
+    async fn generate_with_healing_static(
         provider: &Arc<P>,
-        request: GenerationRequest,
+        validator: &Option<Arc<dyn Validator>>,
+        cache: &Option<Arc<dyn Cache>>,
+        mut request: GenerationRequest,
         max_retries: u32,
     ) -> Result<GenerationResponse> {
+        // 0. Check cache first
+        let cache_key = if cache.is_some() {
+            Some(format!("{}:{}", request.slot.prompt, request.context.as_deref().unwrap_or("")))
+        } else {
+            None
+        };
+
+        if let (Some(ref c), Some(ref key)) = (cache, &cache_key) {
+            if let Some(cached_code) = c.get(key) {
+                debug!("Cache hit for slot: {}", request.slot.name);
+                return Ok(GenerationResponse {
+                    code: cached_code,
+                    tokens_used: None,
+                    metadata: Some(serde_json::json!({"cache": "hit"})),
+                });
+            }
+        }
+
         let mut last_error = None;
 
         for attempt in 0..=max_retries {
-            match provider.generate(request.clone()).await {
-                Ok(response) => return Ok(response),
+            // 1. Generate code
+            let mut response = match provider.generate(request.clone()).await {
+                Ok(r) => r,
                 Err(e) => {
                     debug!("Generation attempt {} failed: {}", attempt + 1, e);
                     last_error = Some(e);
                     if attempt < max_retries {
                         tokio::time::sleep(std::time::Duration::from_millis(100 * (attempt as u64 + 1))).await;
+                        continue;
+                    }
+                    return Err(last_error.unwrap());
+                }
+            };
+
+            // 2. Validate and Heal if validator is present
+            if let Some(ref val) = validator {
+                // Apply formatting (Linter compliance)
+                if let Ok(formatted) = val.format(&request.slot.kind, &response.code) {
+                    response.code = formatted;
+                }
+
+                match val.validate(&request.slot.kind, &response.code)? {
+                    ValidationResult::Valid => {
+                        // Success! Cache if enabled
+                        if let (Some(ref c), Some(ref key)) = (cache, &cache_key) {
+                            c.set(key, response.code.clone());
+                        }
+                        return Ok(response);
+                    },
+                    ValidationResult::Invalid(err_msg) => {
+                        info!("Self-healing: Validation failed for slot '{}', attempt {}. Error: {}", 
+                            request.slot.name, attempt + 1, err_msg);
+                        
+                        last_error = Some(AetherError::ProviderError(err_msg.clone()));
+
+                        if attempt < max_retries {
+                            // Feedback Loop: Add error to prompt for next attempt
+                            request.slot.prompt = format!(
+                                "{}\n\n[SELF-HEALING FEEDBACK]\nYour previous output had validation errors. Please fix them and output ONLY the corrected code.\nERROR:\n{}",
+                                request.slot.prompt,
+                                err_msg
+                            );
+                            continue;
+                        }
                     }
                 }
+            } else {
+                // No validator, just cache and return
+                if let (Some(ref c), Some(ref key)) = (cache, &cache_key) {
+                    c.set(key, response.code.clone());
+                }
+                return Ok(response);
             }
         }
 
-        Err(last_error.unwrap_or_else(|| AetherError::ProviderError("Unknown error".to_string())))
+        Err(last_error.unwrap_or_else(|| AetherError::ProviderError("Healing failed".to_string())))
     }
 
     /// Generate code for a single slot.

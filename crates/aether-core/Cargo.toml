@@ -18,6 +18,10 @@ tracing = { workspace = true }
 futures = "0.3"
 async-stream = "0.3"
 tokio-stream = "0.1"
+tempfile = "3.10"
+fastembed = "5"
+dashmap = "5.5"
+serde_yaml = "0.9"
 
 [dev-dependencies]
 tokio-test = "0.4"

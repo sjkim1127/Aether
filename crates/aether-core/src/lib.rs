@@ -29,6 +29,9 @@ pub mod slot;
 pub mod provider;
 pub mod context;
 pub mod engine;
+pub mod validation;
+pub mod cache;
+pub mod toon;
 
 pub use error::{AetherError, Result};
 pub use template::Template;
