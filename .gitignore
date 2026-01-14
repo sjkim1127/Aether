@@ -31,5 +31,5 @@ Thumbs.db
 generated_page.html
 
 # Demo folders (not part of the framework)
-/demo-site/
+/demo/
 /demo-react/
