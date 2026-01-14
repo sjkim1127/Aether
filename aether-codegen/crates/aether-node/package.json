@@ -1,0 +1,52 @@
+{
+    "name": "aether-codegen",
+    "version": "0.1.0",
+    "description": "AI-powered dynamic code injection framework - Generate code with AI using templates",
+    "main": "index.js",
+    "types": "index.d.ts",
+    "author": "Aether Team",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/sjkim1127/aether-codegen"
+    },
+    "keywords": [
+        "ai",
+        "code-generation",
+        "template",
+        "openai",
+        "gpt",
+        "anthropic",
+        "claude",
+        "ollama",
+        "llm",
+        "codegen",
+        "rust",
+        "napi"
+    ],
+    "engines": {
+        "node": ">= 18"
+    },
+    "napi": {
+        "name": "aether-codegen",
+        "triples": {
+            "defaults": false,
+            "additional": [
+                "x86_64-pc-windows-msvc"
+            ]
+        }
+    },
+    "files": [
+        "index.js",
+        "index.d.ts",
+        "*.node"
+    ],
+    "scripts": {
+        "build": "napi build --platform --release",
+        "build:debug": "napi build --platform",
+        "test": "node test.js"
+    },
+    "devDependencies": {
+        "@napi-rs/cli": "^2.18.0"
+    }
+}
