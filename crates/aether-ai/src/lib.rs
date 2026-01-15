@@ -95,15 +95,11 @@ pub fn grok(model: &str) -> Result<OpenAiProvider> {
     let api_key = std::env::var("XAI_API_KEY")
         .map_err(|_| AetherError::ConfigError("XAI_API_KEY not set".to_string()))?;
 
+    // Grok uses OpenAI-compatible API. 
+    // Note: base_url must include the full endpoint path as OpenAiProvider 
+    // uses it directly without appending /chat/completions.
     let config = ProviderConfig::new(api_key, model)
-        .with_base_url("https://api.x.ai/v1/chat/completions"); // OpenAI impl appends nothing, wait.
-    
-    // Check openai.rs implementation. It appends nothing to base_url?
-    // openai.rs: let url = self.config.base_url.as_deref().unwrap_or(OPENAI_API_URL);
-    // OPENAI_API_URL is full path.
-    // So we need full path here.
-    
-    let config = config.with_base_url("https://api.x.ai/v1/chat/completions");
+        .with_base_url("https://api.x.ai/v1/chat/completions");
 
     OpenAiProvider::new(config)
 }

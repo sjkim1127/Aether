@@ -27,6 +27,12 @@ pub struct Slot {
 
     /// Specific temperature override for this slot (0.0 - 2.0).
     pub temperature: Option<f32>,
+
+    /// Specific model override for this slot (e.g., "gpt-4o").
+    pub model: Option<String>,
+
+    /// Maximum tokens to generate for this slot.
+    pub max_tokens: Option<u32>,
 }
 
 /// The kind of slot determines how code is generated.
@@ -98,6 +104,8 @@ impl std::hash::Hash for Slot {
         if let Some(temp) = self.temperature {
             temp.to_bits().hash(state);
         }
+        self.model.hash(state);
+        self.max_tokens.hash(state);
     }
 }
 
@@ -126,12 +134,26 @@ impl Slot {
             required: true,
             default: None,
             temperature: None,
+            model: None,
+            max_tokens: None,
         }
     }
 
     /// Set a specific temperature for this slot.
     pub fn with_temperature(mut self, temp: f32) -> Self {
         self.temperature = Some(temp.clamp(0.0, 2.0));
+        self
+    }
+
+    /// Set model override for this slot.
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
+        self
+    }
+
+    /// Set maximum tokens for this slot.
+    pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
+        self.max_tokens = Some(max_tokens);
         self
     }
 

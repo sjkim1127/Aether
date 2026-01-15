@@ -24,6 +24,7 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use aether_core::{
@@ -34,6 +35,8 @@ use aether_core::{
     Template as CoreTemplate,
     RenderSession as CoreRenderSession,
     AetherRuntime,
+    AetherConfig,
+    toon::Toon,
 };
 use aether_ai::{OpenAiProvider, AnthropicProvider, OllamaProvider};
 use aether_core::AiProvider;
@@ -63,12 +66,18 @@ impl Template {
         self.inner.name = name;
     }
 
-    /// Add a slot with a prompt and optional temperature.
+    /// Add a slot with a prompt and optional temperature, model, and max_tokens.
     #[napi]
-    pub fn set_slot(&mut self, name: String, prompt: String, temperature: Option<f64>) {
+    pub fn set_slot(&mut self, name: String, prompt: String, temperature: Option<f64>, model: Option<String>, max_tokens: Option<u32>) {
         let mut slot = CoreSlot::new(name, prompt);
         if let Some(temp) = temperature {
             slot.temperature = Some(temp as f32);
+        }
+        if let Some(m) = model {
+            slot.model = Some(m);
+        }
+        if let Some(mt) = max_tokens {
+            slot.max_tokens = Some(mt);
         }
         self.inner = self.inner.clone().configure_slot(slot);
     }
@@ -158,6 +167,18 @@ impl Slot {
     pub fn set_temperature(&mut self, temp: f64) {
         self.inner.temperature = Some(temp as f32);
     }
+
+    /// Set model override for this slot.
+    #[napi]
+    pub fn set_model(&mut self, model: String) {
+        self.inner.model = Some(model);
+    }
+
+    /// Set maximum tokens for this slot.
+    #[napi]
+    pub fn set_max_tokens(&mut self, max_tokens: u32) {
+        self.inner.max_tokens = Some(max_tokens);
+    }
 }
 
 /// Provider type enum for JavaScript.
@@ -189,11 +210,7 @@ pub struct AetherEngine {
     model: String,
     api_key: Option<String>,
     context: Option<CoreContext>,
-    parallel: bool,
-    max_retries: u32,
-    heal: bool,
-    cache: bool,
-    toon: bool,
+    config: AetherConfig,
     api_key_url: Option<String>,
 }
 
@@ -207,11 +224,7 @@ impl AetherEngine {
             model: model.unwrap_or_else(|| "gpt-4o".to_string()),
             api_key: std::env::var("OPENAI_API_KEY").ok(),
             context: None,
-            parallel: true,
-            max_retries: 2,
-            heal: false,
-            cache: false,
-            toon: false,
+            config: AetherConfig::default(),
             api_key_url: None,
         })
     }
@@ -224,16 +237,12 @@ impl AetherEngine {
             model: model.unwrap_or_else(|| "claude-3-5-sonnet-latest".to_string()),
             api_key: std::env::var("ANTHROPIC_API_KEY").ok(),
             context: None,
-            parallel: true,
-            max_retries: 2,
-            heal: false,
-            cache: false,
-            toon: false,
+            config: AetherConfig::default(),
             api_key_url: None,
         })
     }
 
-    /// Create a new engine with Gemini provider.
+    /// Create a new engine with Google Gemini provider.
     #[napi(factory)]
     pub fn gemini(model: Option<String>) -> Result<Self> {
         Ok(Self {
@@ -241,33 +250,12 @@ impl AetherEngine {
             model: model.unwrap_or_else(|| "gemini-1.5-pro".to_string()),
             api_key: std::env::var("GOOGLE_API_KEY").ok(),
             context: None,
-            parallel: true,
-            max_retries: 2,
-            heal: false,
-            cache: false,
-            toon: false,
+            config: AetherConfig::default(),
             api_key_url: None,
         })
     }
 
-    /// Create a new engine with Ollama provider.
-    #[napi(factory)]
-    pub fn ollama(model: Option<String>) -> Result<Self> {
-        Ok(Self {
-            provider_type: ProviderType::Ollama,
-            model: model.unwrap_or_else(|| "codellama".to_string()),
-            api_key: None,
-            context: None,
-            parallel: true,
-            max_retries: 2,
-            heal: false,
-            cache: false,
-            toon: false,
-            api_key_url: None,
-        })
-    }
-
-    /// Create a new engine with Grok provider.
+    /// Create a new engine with Grok (xAI) provider.
     #[napi(factory)]
     pub fn grok(model: Option<String>) -> Result<Self> {
         Ok(Self {
@@ -275,11 +263,20 @@ impl AetherEngine {
             model: model.unwrap_or_else(|| "grok-1".to_string()),
             api_key: std::env::var("XAI_API_KEY").ok(),
             context: None,
-            parallel: true,
-            max_retries: 2,
-            heal: false,
-            cache: false,
-            toon: false,
+            config: AetherConfig::default(),
+            api_key_url: None,
+        })
+    }
+
+    /// Create a new engine with Ollama provider (local).
+    #[napi(factory)]
+    pub fn ollama(model: String) -> Result<Self> {
+        Ok(Self {
+            provider_type: ProviderType::Ollama,
+            model,
+            api_key: None,
+            context: None,
+            config: AetherConfig::default(),
             api_key_url: None,
         })
     }
@@ -312,34 +309,43 @@ impl AetherEngine {
         self.context = Some(ctx);
     }
 
-    /// Enable or disable parallel generation.
-    #[napi]
-    pub fn set_parallel(&mut self, enabled: bool) {
-        self.parallel = enabled;
-    }
-
-    /// Set maximum retries.
-    #[napi]
-    pub fn set_max_retries(&mut self, retries: u32) {
-        self.max_retries = retries;
-    }
-
-    /// Enable or disable self-healing.
-    #[napi]
-    pub fn set_heal(&mut self, enabled: bool) {
-        self.heal = enabled;
-    }
-
-    /// Enable or disable semantic caching.
+    /// Enable or disable incremental caching.
     #[napi]
     pub fn set_cache(&mut self, enabled: bool) {
-        self.cache = enabled;
+        self.config.cache_enabled = enabled;
     }
 
     /// Enable or disable TOON formatting.
     #[napi]
     pub fn set_toon(&mut self, enabled: bool) {
-        self.toon = enabled;
+        self.config.toon_enabled = enabled;
+    }
+
+    /// Enable or disable parallel generation.
+    #[napi]
+    pub fn set_parallel(&mut self, enabled: bool) {
+        self.config.parallel = enabled;
+    }
+
+    /// Set maximum retries.
+    #[napi]
+    pub fn set_max_retries(&mut self, retries: u32) {
+        self.config.max_retries = retries;
+    }
+
+    /// Enable or disable self-healing.
+    #[napi]
+    pub fn set_heal(&mut self, enabled: bool) {
+        self.config.healing_enabled = enabled;
+    }
+
+    /// Deserialize a TOON string back into a JSON structure.
+    #[napi]
+    pub fn toon_deserialize(&self, toon_str: String) -> Result<String> {
+        let val = Toon::deserialize(&toon_str)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&val)
+            .map_err(|e| Error::from_reason(e.to_string()))
     }
 
     /// Execute a Rhai script directly (Aether Shield core functionality).
@@ -474,22 +480,14 @@ impl AetherEngine {
         template: &CoreTemplate,
         provider: P,
     ) -> Result<String> {
-        let mut engine = CoreEngine::new(provider)
-            .parallel(self.parallel)
-            .max_retries(self.max_retries);
+        let mut engine = CoreEngine::with_config(provider, self.config.clone());
         
         if let Some(ref ctx) = self.context {
             engine = engine.with_context(ctx.clone());
         }
 
-        // Apply Premium Features
-        if self.heal {
-            engine = engine.with_validator(aether_core::validation::RustValidator);
-        }
-        if self.toon {
-            engine = engine.with_toon(true);
-        }
-        if self.cache {
+        // Apply Premium Features if enabled in config but not yet in engine
+        if self.config.cache_enabled && engine.cache().is_none() {
             engine = engine.with_cache(aether_core::cache::SemanticCache::new().map_err(|e| Error::from_reason(e.to_string()))?);
         }
         
@@ -507,73 +505,43 @@ impl AetherEngine {
     /// const result1 = await engine.renderIncremental(template, session);  // Full render
     /// const result2 = await engine.renderIncremental(template, session);  // Uses cache
     /// ```
-    #[napi]
     pub async fn render_incremental(
         &self,
         template: &Template,
         session: &RenderSession,
     ) -> Result<String> {
-        match self.provider_type {
+        let provider = match self.provider_type {
             ProviderType::OpenAI => {
-                let api_key = self.api_key.clone()
-                    .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-                    .unwrap_or_default();
-                
-                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
-                let provider = OpenAiProvider::new(config)
-                    .map_err(|e| Error::from_reason(e.to_string()))?;
-                
-                let engine = CoreEngine::new(provider);
-                engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
-                    .map_err(|e| Error::from_reason(e.to_string()))
+                let api_key = self.api_key.clone().or_else(|| std::env::var("OPENAI_API_KEY").ok()).unwrap_or_default();
+                let mut config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                if let Some(ref url) = self.api_key_url { config = config.with_api_key_url(url); }
+                Arc::new(OpenAiProvider::new(config).map_err(|e| Error::from_reason(e.to_string()))?) as Arc<dyn AiProvider>
             }
             ProviderType::Anthropic => {
-                let api_key = self.api_key.clone()
-                    .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-                    .unwrap_or_default();
-                
-                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
-                let provider = AnthropicProvider::new(config)
-                    .map_err(|e| Error::from_reason(e.to_string()))?;
-                
-                let engine = CoreEngine::new(provider);
-                engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
-                    .map_err(|e| Error::from_reason(e.to_string()))
+                let api_key = self.api_key.clone().or_else(|| std::env::var("ANTHROPIC_API_KEY").ok()).unwrap_or_default();
+                let mut config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                if let Some(ref url) = self.api_key_url { config = config.with_api_key_url(url); }
+                Arc::new(AnthropicProvider::new(config).map_err(|e| Error::from_reason(e.to_string()))?) as Arc<dyn AiProvider>
             }
             ProviderType::Gemini => {
-                let api_key = self.api_key.clone()
-                    .or_else(|| std::env::var("GOOGLE_API_KEY").ok())
-                    .unwrap_or_default();
-                
-                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
-                let provider = aether_ai::GeminiProvider::new(config)
-                    .map_err(|e| Error::from_reason(e.to_string()))?;
-                
-                let engine = CoreEngine::new(provider);
-                engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
-                    .map_err(|e| Error::from_reason(e.to_string()))
+                let api_key = self.api_key.clone().or_else(|| std::env::var("GOOGLE_API_KEY").ok()).unwrap_or_default();
+                let mut config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                if let Some(ref url) = self.api_key_url { config = config.with_api_key_url(url); }
+                Arc::new(aether_ai::GeminiProvider::new(config).map_err(|e| Error::from_reason(e.to_string()))?) as Arc<dyn AiProvider>
             }
-            ProviderType::Ollama => {
-                let provider = OllamaProvider::new(&self.model);
-                let engine = CoreEngine::new(provider);
-                engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
-                    .map_err(|e| Error::from_reason(e.to_string()))
-            }
+            ProviderType::Ollama => Arc::new(OllamaProvider::new(&self.model)) as Arc<dyn AiProvider>,
             ProviderType::Grok => {
-                let api_key = self.api_key.clone()
-                    .or_else(|| std::env::var("XAI_API_KEY").ok())
-                    .unwrap_or_default();
-                
-                let config = aether_core::ProviderConfig::new(&api_key, &self.model)
-                    .with_base_url("https://api.x.ai/v1/chat/completions");
-                let provider = OpenAiProvider::new(config)
-                    .map_err(|e| Error::from_reason(e.to_string()))?;
-                
-                let engine = CoreEngine::new(provider);
-                engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
-                    .map_err(|e| Error::from_reason(e.to_string()))
+                let api_key = self.api_key.clone().or_else(|| std::env::var("XAI_API_KEY").ok()).unwrap_or_default();
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model).with_base_url("https://api.x.ai/v1/chat/completions");
+                Arc::new(OpenAiProvider::new(config).map_err(|e| Error::from_reason(e.to_string()))?) as Arc<dyn AiProvider>
             }
-        }
+        };
+
+        let mut engine = CoreEngine::with_config_arc(provider, self.config.clone());
+        if let Some(ref ctx) = self.context { engine = engine.with_context(ctx.clone()); }
+        
+        engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
+            .map_err(|e| Error::from_reason(e.to_string()))
     }
 
     /// Get streaming chunks as an array (alternative to callback-based streaming).
@@ -639,7 +607,6 @@ impl AetherEngine {
         }
     }
 
-    /// Collect stream chunks from a provider.
     async fn collect_stream_chunks<P: AiProvider + 'static>(
         &self,
         template: &CoreTemplate,
@@ -648,23 +615,18 @@ impl AetherEngine {
     ) -> Result<Vec<String>> {
         use futures::StreamExt;
 
-        let engine = CoreEngine::new(provider);
+        let mut engine = CoreEngine::with_config(provider, self.config.clone());
+        if let Some(ref ctx) = self.context { engine = engine.with_context(ctx.clone()); }
         
         match engine.generate_slot_stream(template, slot_name) {
             Ok(mut stream) => {
                 let mut chunks = Vec::new();
-                
                 while let Some(result) = stream.next().await {
                     match result {
-                        Ok(chunk) => {
-                            chunks.push(chunk.delta);
-                        }
-                        Err(e) => {
-                            return Err(Error::from_reason(e.to_string()));
-                        }
+                        Ok(chunk) => chunks.push(chunk.delta),
+                        Err(e) => return Err(Error::from_reason(e.to_string())),
                     }
                 }
-                
                 Ok(chunks)
             }
             Err(e) => Err(Error::from_reason(e.to_string()))
@@ -684,7 +646,7 @@ pub async fn generate(prompt: String, provider: Option<String>) -> Result<String
     
     let engine = match provider_str.to_lowercase().as_str() {
         "anthropic" | "claude" => AetherEngine::anthropic(None)?,
-        "ollama" | "local" => AetherEngine::ollama(None)?,
+        "ollama" | "local" => AetherEngine::ollama("llama3".to_string())?,
         _ => AetherEngine::openai(None)?,
     };
     

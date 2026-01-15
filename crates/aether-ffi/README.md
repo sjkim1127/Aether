@@ -101,6 +101,7 @@ target_link_libraries(your_target PUBLIC ${AETHER_LIB})
 | `aether_free_engine(engine)` | Free engine handle |
 | `aether_create_template(content)` | Create template from string |
 | `aether_template_add_slot(template, name, prompt)` | Add slot to template |
+| `aether_template_add_slot_full(template, name, prompt, temp, model, max_tokens)` | **Add slot with model/temp/token overrides** |
 | `aether_free_template(template)` | Free template handle |
 | `aether_render(engine, template)` | Render template (AI generation) |
 | `aether_render_stream(engine, template, slot_name, callback, user_data)` | **Streaming** render with callback |

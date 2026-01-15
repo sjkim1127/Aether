@@ -132,6 +132,12 @@ pub struct GenerationRequest {
 
     /// System prompt override.
     pub system_prompt: Option<String>,
+
+    /// Specific model override for this request.
+    pub model: Option<String>,
+
+    /// Maximum tokens for this request.
+    pub max_tokens: Option<u32>,
 }
 
 use futures::stream::BoxStream;
@@ -334,6 +340,8 @@ mod tests {
             slot: Slot::new("button", "Create a button"),
             context: None,
             system_prompt: None,
+            model: None,
+            max_tokens: None,
         };
 
         let response = provider.generate(request).await.unwrap();

@@ -90,7 +90,7 @@ pub fn ai(input: TokenStream) -> TokenStream {
                 let template = Template::new("{{AI:generated}}")
                     .with_slot("generated", prompt);
 
-                let engine = InjectionEngine::new(provider);
+                let engine = InjectionEngine::with_config(provider, aether_core::AetherConfig::from_env());
                 engine.render(&template).await
             }
         }

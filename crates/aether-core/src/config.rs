@@ -59,6 +59,21 @@ pub struct AetherConfig {
     /// Higher values require more similar prompts to hit the cache.
     /// Default: 0.90, Env: AETHER_CACHE_THRESHOLD=0.90
     pub cache_threshold: f32,
+
+    /// Prompt header for TOON context block.
+    pub prompt_toon_header: String,
+
+    /// Instructional note for the AI about TOON protocol.
+    pub prompt_toon_note: String,
+
+    /// Feedback prefix for self-healing retries.
+    pub prompt_healing_feedback: String,
+
+    /// Notice added when TDD mode is active.
+    pub prompt_tdd_notice: String,
+
+    /// Base delay for retry backoff in milliseconds.
+    pub retry_backoff_ms: u64,
 }
 
 impl Default for AetherConfig {
@@ -73,6 +88,11 @@ impl Default for AetherConfig {
             max_retries: 2,
             auto_toon_threshold: Some(2000),
             cache_threshold: 0.90,
+            prompt_toon_header: "[CONTEXT:TOON]".to_string(),
+            prompt_toon_note: "[TOON Protocol Note]\nTOON is a compact key:value mapping protocol. Each line represents 'key: value'. Use this context to inform your code generation, respecting the framework, language, and architectural constraints defined within.".to_string(),
+            prompt_healing_feedback: "[SELF-HEALING FEEDBACK]\nYour previous output had validation errors. Please fix them and output ONLY the corrected code.\nERROR:\n".to_string(),
+            prompt_tdd_notice: "\n\nIMPORTANT: The system is running in TDD (Test-Driven Development) mode. Your code will be validated against compiler checks and functional tests. If possible, include unit tests in your response to help self-verify. If validation fails, you will receive feedback to fix the code.".to_string(),
+            retry_backoff_ms: 100,
         }
     }
 }
@@ -116,6 +136,23 @@ impl AetherConfig {
         if let Ok(v) = env::var("AETHER_CACHE_THRESHOLD") {
             if let Ok(n) = v.parse() {
                 config.cache_threshold = n;
+            }
+        }
+        if let Ok(v) = env::var("AETHER_PROMPT_TOON_HEADER") {
+            config.prompt_toon_header = v;
+        }
+        if let Ok(v) = env::var("AETHER_PROMPT_TOON_NOTE") {
+            config.prompt_toon_note = v;
+        }
+        if let Ok(v) = env::var("AETHER_PROMPT_HEALING_FEEDBACK") {
+            config.prompt_healing_feedback = v;
+        }
+        if let Ok(v) = env::var("AETHER_PROMPT_TDD_NOTICE") {
+            config.prompt_tdd_notice = v;
+        }
+        if let Ok(v) = env::var("AETHER_RETRY_BACKOFF") {
+            if let Ok(n) = v.parse() {
+                config.retry_backoff_ms = n;
             }
         }
 

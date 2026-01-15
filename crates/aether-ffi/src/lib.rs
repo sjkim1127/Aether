@@ -441,6 +441,50 @@ pub extern "C" fn aether_template_add_slot(
     template_ref.inner = template_ref.inner.clone().with_slot(name_str, prompt_str);
 }
 
+/// Add a slot with temperature more detailed settings.
+///
+/// # Arguments
+/// * `template` - Template handle
+/// * `name` - Slot name
+/// * `prompt` - AI prompt for this slot
+/// * `temperature` - Temperature override (0.0 to 2.0, use negative for default)
+/// * `model` - Model identifier (or NULL for default)
+/// * `max_tokens` - Maximum tokens (0 for default)
+#[no_mangle]
+pub extern "C" fn aether_template_add_slot_full(
+    template: *mut AetherTemplate,
+    name: *const c_char,
+    prompt: *const c_char,
+    temperature: f32,
+    model: *const c_char,
+    max_tokens: u32,
+) {
+    if template.is_null() || name.is_null() || prompt.is_null() {
+        return;
+    }
+
+    let template_ref = unsafe { &mut *template };
+    let name_str = unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned();
+    let prompt_str = unsafe { CStr::from_ptr(prompt) }.to_string_lossy().into_owned();
+
+    let mut slot = Slot::new(name_str, prompt_str);
+    
+    if temperature >= 0.0 {
+        slot = slot.with_temperature(temperature);
+    }
+
+    if !model.is_null() {
+        let model_str = unsafe { CStr::from_ptr(model) }.to_string_lossy().into_owned();
+        slot = slot.with_model(model_str);
+    }
+
+    if max_tokens > 0 {
+        slot = slot.with_max_tokens(max_tokens);
+    }
+
+    template_ref.inner = template_ref.inner.clone().configure_slot(slot);
+}
+
 /// Free a template handle.
 #[no_mangle]
 pub extern "C" fn aether_free_template(template: *mut AetherTemplate) {

@@ -12,7 +12,7 @@ impl Toon {
             Value::Array(arr) => Self::serialize_array(arr, 0),
             Value::String(s) => s.clone(),
             Value::Number(n) => n.to_string(),
-            Value::Bool(b) => b.to_string(),
+            Value::Bool(b) => if *b { "T" } else { "F" }.to_string(),
             Value::Null => "~".to_string(),
         }
     }
@@ -46,8 +46,8 @@ impl Toon {
         if let Some(first) = arr.first() {
             if let Value::Object(first_map) = first {
                 let keys: Vec<String> = first_map.keys().cloned().collect();
-                let mut out = format!("{{{}}}:\n", keys.join(","));
                 let pad = "  ".repeat(indent);
+                let mut out = format!("{}{{{}}}:\n", pad, keys.join(","));
 
                 for item in arr {
                     if let Value::Object(item_map) = item {
@@ -78,6 +78,166 @@ impl Toon {
             _ => ".".to_string(),
         }
     }
+
+    /// Deserialize a TOON string back into a JSON value.
+    pub fn deserialize(input: &str) -> Result<Value, String> {
+        let lines: Vec<&str> = input.lines().filter(|l| !l.trim().is_empty()).collect();
+        if lines.is_empty() {
+            return Ok(Value::Null);
+        }
+
+        Self::parse_level(&lines, 0).map(|(v, _)| v)
+    }
+
+    fn parse_level(lines: &[&str], start_idx: usize) -> Result<(Value, usize), String> {
+        if start_idx >= lines.len() {
+            return Ok((Value::Null, start_idx));
+        }
+
+        let first_line = lines[start_idx];
+        let indent = first_line.chars().take_while(|c| c.is_whitespace()).count();
+        let trimmed = first_line.trim();
+
+        if trimmed.starts_with('{') && trimmed.contains("}:") {
+            // Tabular format: {id,name}:
+            return Self::parse_tabular(lines, start_idx, indent);
+        }
+
+        if trimmed.starts_with("- ") {
+            // List format
+            return Self::parse_list(lines, start_idx, indent);
+        }
+
+        // Object format (key: value)
+        let mut map = Map::new();
+        let mut idx = start_idx;
+
+        while idx < lines.len() {
+            let line = lines[idx];
+            let current_indent = line.chars().take_while(|c| c.is_whitespace()).count();
+            
+            if current_indent < indent {
+                break;
+            }
+            if current_indent > indent {
+                // This shouldn't happen in a well-formed object stream without a parent key
+                idx += 1;
+                continue;
+            }
+
+            let line_trimmed = line.trim();
+            if let Some(colon_idx) = line_trimmed.find(':') {
+                let mut key = line_trimmed[..colon_idx].trim().to_string();
+                
+                // Strip [len] suffix if present
+                if let Some(bracket_idx) = key.find('[') {
+                    if key.ends_with(']') {
+                        key = key[..bracket_idx].to_string();
+                    }
+                }
+
+                let val_part = line_trimmed[colon_idx + 1..].trim();
+
+                if val_part.is_empty() && idx + 1 < lines.len() {
+                    // Check if next line is more indented (nested object/array)
+                    let next_indent = lines[idx + 1].chars().take_while(|c| c.is_whitespace()).count();
+                    if next_indent > current_indent {
+                        let (child_val, next_idx) = Self::parse_level(lines, idx + 1)?;
+                        map.insert(key, child_val);
+                        idx = next_idx;
+                        continue;
+                    }
+                }
+                
+                map.insert(key, Self::parse_primitive(val_part));
+                idx += 1;
+            } else {
+                idx += 1;
+            }
+        }
+
+        Ok((Value::Object(map), idx))
+    }
+
+    fn parse_tabular(lines: &[&str], start_idx: usize, base_indent: usize) -> Result<(Value, usize), String> {
+        let header = lines[start_idx].trim();
+        let keys_str = header.trim_start_matches('{').trim_end_matches("}:");
+        let keys: Vec<&str> = keys_str.split(',').map(|k| k.trim()).collect();
+        
+        let mut arr = Vec::new();
+        let mut idx = start_idx + 1;
+
+        while idx < lines.len() {
+            let line = lines[idx];
+            let current_indent = line.chars().take_while(|c| c.is_whitespace()).count();
+            if current_indent <= base_indent && !line.trim().is_empty() && idx != (start_idx + 1) {
+                // We keep moving if it's the first line after header, otherwise check indent
+                if current_indent < base_indent { break; }
+            }
+
+            let row_trimmed = line.trim();
+            if row_trimmed.is_empty() { 
+                idx += 1;
+                continue; 
+            }
+
+            let values: Vec<Value> = row_trimmed.split(',')
+                .map(|v| Self::parse_primitive(v.trim()))
+                .collect();
+            
+            let mut obj = Map::new();
+            for (i, key) in keys.iter().enumerate() {
+                let val = values.get(i).cloned().unwrap_or(Value::Null);
+                obj.insert(key.to_string(), val);
+            }
+            arr.push(Value::Object(obj));
+            idx += 1;
+        }
+
+        Ok((Value::Array(arr), idx))
+    }
+
+    fn parse_list(lines: &[&str], start_idx: usize, base_indent: usize) -> Result<(Value, usize), String> {
+        let mut arr = Vec::new();
+        let mut idx = start_idx;
+
+        while idx < lines.len() {
+            let line = lines[idx];
+            let current_indent = line.chars().take_while(|c| c.is_whitespace()).count();
+            if current_indent < base_indent {
+                break;
+            }
+
+            let trimmed = line.trim();
+            if trimmed.starts_with("- ") {
+                arr.push(Self::parse_primitive(&trimmed[2..]));
+            }
+            idx += 1;
+        }
+
+        Ok((Value::Array(arr), idx))
+    }
+
+    fn parse_primitive(s: &str) -> Value {
+        match s {
+            "~" => Value::Null,
+            "T" => Value::Bool(true),
+            "F" => Value::Bool(false),
+            _ => {
+                if let Ok(n) = s.parse::<i64>() {
+                    Value::Number(n.into())
+                } else if let Ok(f) = s.parse::<f64>() {
+                    if let Some(n) = serde_json::Number::from_f64(f) {
+                        Value::Number(n)
+                    } else {
+                        Value::String(s.to_string())
+                    }
+                } else {
+                    Value::String(s.replace("\\,", ",").to_string())
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -105,5 +265,32 @@ mod tests {
         let toon = Toon::serialize(&data);
         assert!(toon.contains("user: admin"));
         assert!(toon.contains("meta:"));
+    }
+
+    #[test]
+    fn test_toon_roundtrip() {
+        let original = json!({
+            "project": "Aether",
+            "active": true,
+            "version": 1,
+            "null_val": null,
+            "tags": ["ai", "rust", "security"],
+            "files": [
+                {"name": "main.rs", "size": 1024},
+                {"name": "lib.rs", "size": 2048}
+            ]
+        });
+
+        let serialized = Toon::serialize(&original);
+        println!("Serialized TOON:\n{}", serialized);
+        let deserialized = Toon::deserialize(&serialized).unwrap();
+
+        // Note: Tabular conversion might lose some type info if not careful, 
+        // but here it should match. Bool T/F is handled.
+        assert_eq!(original["project"], deserialized["project"]);
+        assert_eq!(deserialized["active"], json!(true));
+        assert_eq!(deserialized["null_val"], Value::Null);
+        assert_eq!(deserialized["tags"].as_array().unwrap().len(), 3);
+        assert_eq!(deserialized["files"].as_array().unwrap().len(), 2);
     }
 }

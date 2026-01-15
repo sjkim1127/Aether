@@ -2,10 +2,12 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use aether_core::{
-    InjectionEngine, Template as CoreTemplate, Slot as CoreSlot,
     AetherRuntime, ProviderConfig, RenderSession as CoreRenderSession,
     cache::SemanticCache,
     validation::RustValidator,
+    AetherConfig,
+    InjectionContext as CoreContext,
+    InjectionEngine,
 };
 use aether_ai::{OpenAiProvider, AnthropicProvider, GeminiProvider, OllamaProvider};
 use std::collections::HashMap;
@@ -38,10 +40,16 @@ impl Template {
         Template { inner: CoreTemplate::new(content) }
     }
 
-    fn add_slot(&mut self, key: String, prompt: String, temp: Option<f32>) {
+    fn add_slot(&mut self, key: String, prompt: String, temp: Option<f32>, model: Option<String>, max_tokens: Option<u32>) {
         let mut slot = CoreSlot::new(key.clone(), prompt);
         if let Some(t) = temp {
             slot = slot.with_temperature(t);
+        }
+        if let Some(m) = model {
+            slot = slot.with_model(m);
+        }
+        if let Some(mt) = max_tokens {
+            slot = slot.with_max_tokens(mt);
         }
         self.inner = self.inner.clone().configure_slot(slot);
     }
@@ -82,10 +90,9 @@ impl RenderSession {
 struct Engine {
     provider: ProviderKind,
     runtime: tokio::runtime::Runtime,
-    // Feature Flags
-    healing_enabled: bool,
-    cache_enabled: bool,
-    toon_enabled: bool,
+    config: AetherConfig,
+    global_context: Option<CoreContext>,
+    api_key_url: Option<String>,
 }
 
 #[pymethods]
@@ -145,25 +152,56 @@ impl Engine {
         Ok(Engine { 
             provider: provider_kind, 
             runtime: rt,
-            healing_enabled: false,
-            cache_enabled: false,
-            toon_enabled: false,
+            config: AetherConfig::default(),
+            global_context: None,
+            api_key_url: None,
         })
     }
 
     /// Enable or disable Self-Healing (automatic validation and retry).
     fn set_healing(&mut self, enabled: bool) {
-        self.healing_enabled = enabled;
+        self.config.healing_enabled = enabled;
     }
 
     /// Enable or disable Semantic Cache (reduces API costs for similar prompts).
     fn set_cache(&mut self, enabled: bool) {
-        self.cache_enabled = enabled;
+        self.config.cache_enabled = enabled;
     }
 
     /// Enable or disable TOON Protocol (token-efficient context injection).
     fn set_toon(&mut self, enabled: bool) {
-        self.toon_enabled = enabled;
+        self.config.toon_enabled = enabled;
+    }
+
+    /// Enable or disable parallel generation.
+    fn set_parallel(&mut self, enabled: bool) {
+        self.config.parallel = enabled;
+    }
+
+    /// Set maximum retries.
+    fn set_max_retries(&mut self, retries: u32) {
+        self.config.max_retries = retries;
+    }
+
+    /// Set the API key URL for remote resolution.
+    fn set_api_key_url(&mut self, url: String) {
+        self.api_key_url = Some(url);
+    }
+
+    /// Set global context for all generations.
+    #[pyo3(signature = (project=None, language=None, framework=None))]
+    fn set_context(&mut self, project: Option<String>, language: Option<String>, framework: Option<String>) {
+        let mut ctx = CoreContext::new();
+        if let Some(p) = project {
+            ctx = ctx.with_project(p);
+        }
+        if let Some(l) = language {
+            ctx = ctx.with_language(l);
+        }
+        if let Some(f) = framework {
+            ctx = ctx.with_framework(f);
+        }
+        self.global_context = Some(ctx);
     }
 
     /// Render a template using the AI engine.
@@ -176,32 +214,49 @@ impl Engine {
 
         self.runtime.block_on(async {
             // Build a fresh InjectionEngine with the stored flags
-            macro_rules! build_and_render {
-                ($provider:expr) => {{
-                    let mut engine = InjectionEngine::new($provider.clone());
-                    
-                    if healing {
-                        engine = engine.with_validator(RustValidator);
-                    }
-                    if caching {
-                        if let Ok(cache) = SemanticCache::new() {
-                            engine = engine.with_cache(cache);
-                        }
-                    }
-                    if toon {
-                        engine = engine.with_toon(true);
-                    }
-
-                    engine.render(&template_inner).await
-                }};
-            }
-
             let result = match &self.provider {
-                ProviderKind::OpenAi(p) => build_and_render!(p),
-                ProviderKind::Anthropic(p) => build_and_render!(p),
-                ProviderKind::Gemini(p) => build_and_render!(p),
-                ProviderKind::Ollama(p) => build_and_render!(p),
-                ProviderKind::Grok(p) => build_and_render!(p),
+                ProviderKind::OpenAi(p) => {
+                    let mut p = p.clone();
+                    if let Some(ref url) = self.api_key_url {
+                        p.config.api_key_url = Some(url.clone());
+                    }
+                    let mut engine = InjectionEngine::with_config(p, self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    engine.render(&template_inner).await
+                },
+                ProviderKind::Anthropic(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    engine.render(&template_inner).await
+                },
+                ProviderKind::Gemini(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    engine.render(&template_inner).await
+                },
+                ProviderKind::Ollama(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    engine.render(&template_inner).await
+                },
+                ProviderKind::Grok(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    if self.config.cache_enabled && engine.cache().is_none() {
+                        engine = engine.with_cache(SemanticCache::new().map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?);
+                    }
+                    engine.render(&template_inner).await
+                },
             };
 
             result.map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
@@ -229,23 +284,54 @@ impl Engine {
         let template_inner = template.inner.clone();
 
         self.runtime.block_on(async {
-            macro_rules! incremental_render {
-                ($provider:expr) => {{
-                    let engine = InjectionEngine::new($provider.clone());
-                    engine.render_incremental(&template_inner, &mut session.inner).await
-                }};
-            }
-
             let result = match &self.provider {
-                ProviderKind::OpenAi(p) => incremental_render!(p),
-                ProviderKind::Anthropic(p) => incremental_render!(p),
-                ProviderKind::Gemini(p) => incremental_render!(p),
-                ProviderKind::Ollama(p) => incremental_render!(p),
-                ProviderKind::Grok(p) => incremental_render!(p),
+                ProviderKind::OpenAi(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    engine.render_incremental(&template_inner, &mut session.inner).await
+                },
+                ProviderKind::Anthropic(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    engine.render_incremental(&template_inner, &mut session.inner).await
+                },
+                ProviderKind::Gemini(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    engine.render_incremental(&template_inner, &mut session.inner).await
+                },
+                ProviderKind::Ollama(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    engine.render_incremental(&template_inner, &mut session.inner).await
+                },
+                ProviderKind::Grok(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    engine.render_incremental(&template_inner, &mut session.inner).await
+                },
             };
 
             result.map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
         })
+    }
+
+    /// Deserialize a TOON string back into a JSON structure.
+    fn toon_deserialize(&self, toon_str: &str) -> PyResult<String> {
+        let val = aether_core::toon::Toon::deserialize(toon_str)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+        serde_json::to_string(&val)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))
     }
 
     /// Execute a Rhai script directly (Aether Shield core functionality).
@@ -312,46 +398,132 @@ impl Engine {
         let template_inner = template.inner.clone();
 
         self.runtime.block_on(async {
-            macro_rules! stream_render {
-                ($provider:expr) => {{
-                    let engine = InjectionEngine::new($provider.clone());
-                    
+            match &self.provider {
+                ProviderKind::OpenAi(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
                     let stream_result = engine.generate_slot_stream(&template_inner, &slot_name);
                     match stream_result {
                         Ok(mut stream) => {
                             let mut full_result = String::new();
-                            
                             while let Some(result) = stream.next().await {
                                 match result {
                                     Ok(chunk) => {
                                         full_result.push_str(&chunk.delta);
-                                        
-                                        // Call Python callback with the chunk
                                         Python::with_gil(|py| {
                                             let _ = callback.call1(py, (chunk.delta.clone(),));
                                         });
                                     }
-                                    Err(e) => {
-                                        return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                                            e.to_string()
-                                        ));
-                                    }
+                                    Err(e) => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string())),
                                 }
                             }
-                            
                             Ok(full_result)
                         }
                         Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
                     }
-                }};
-            }
-
-            match &self.provider {
-                ProviderKind::OpenAi(p) => stream_render!(p),
-                ProviderKind::Anthropic(p) => stream_render!(p),
-                ProviderKind::Gemini(p) => stream_render!(p),
-                ProviderKind::Ollama(p) => stream_render!(p),
-                ProviderKind::Grok(p) => stream_render!(p),
+                },
+                ProviderKind::Anthropic(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    let stream_result = engine.generate_slot_stream(&template_inner, &slot_name);
+                    match stream_result {
+                        Ok(mut stream) => {
+                            let mut full_result = String::new();
+                            while let Some(result) = stream.next().await {
+                                match result {
+                                    Ok(chunk) => {
+                                        full_result.push_str(&chunk.delta);
+                                        Python::with_gil(|py| {
+                                            let _ = callback.call1(py, (chunk.delta.clone(),));
+                                        });
+                                    }
+                                    Err(e) => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string())),
+                                }
+                            }
+                            Ok(full_result)
+                        }
+                        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+                    }
+                },
+                ProviderKind::Gemini(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    let stream_result = engine.generate_slot_stream(&template_inner, &slot_name);
+                    match stream_result {
+                        Ok(mut stream) => {
+                            let mut full_result = String::new();
+                            while let Some(result) = stream.next().await {
+                                match result {
+                                    Ok(chunk) => {
+                                        full_result.push_str(&chunk.delta);
+                                        Python::with_gil(|py| {
+                                            let _ = callback.call1(py, (chunk.delta.clone(),));
+                                        });
+                                    }
+                                    Err(e) => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string())),
+                                }
+                            }
+                            Ok(full_result)
+                        }
+                        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+                    }
+                },
+                ProviderKind::Ollama(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    let stream_result = engine.generate_slot_stream(&template_inner, &slot_name);
+                    match stream_result {
+                        Ok(mut stream) => {
+                            let mut full_result = String::new();
+                            while let Some(result) = stream.next().await {
+                                match result {
+                                    Ok(chunk) => {
+                                        full_result.push_str(&chunk.delta);
+                                        Python::with_gil(|py| {
+                                            let _ = callback.call1(py, (chunk.delta.clone(),));
+                                        });
+                                    }
+                                    Err(e) => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string())),
+                                }
+                            }
+                            Ok(full_result)
+                        }
+                        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+                    }
+                },
+                ProviderKind::Grok(p) => {
+                    let mut engine = InjectionEngine::with_config(p.clone(), self.config.clone());
+                    if let Some(ref ctx) = self.global_context {
+                        engine = engine.with_context(ctx.clone());
+                    }
+                    let stream_result = engine.generate_slot_stream(&template_inner, &slot_name);
+                    match stream_result {
+                        Ok(mut stream) => {
+                            let mut full_result = String::new();
+                            while let Some(result) = stream.next().await {
+                                match result {
+                                    Ok(chunk) => {
+                                        full_result.push_str(&chunk.delta);
+                                        Python::with_gil(|py| {
+                                            let _ = callback.call1(py, (chunk.delta.clone(),));
+                                        });
+                                    }
+                                    Err(e) => return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string())),
+                                }
+                            }
+                            Ok(full_result)
+                        }
+                        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+                    }
+                },
             }
         })
     }

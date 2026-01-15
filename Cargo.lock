@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "aether-ai"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "aether-core",
  "async-stream",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "aether-cli"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "aether-ai",
  "aether-core",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "aether-core"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "aes-gcm",
  "aether-ai",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "aether-ffi"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "aether-ai",
  "aether-core",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "aether-inspector"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "aether-ai",
  "aether-core",
@@ -148,7 +148,7 @@ dependencies = [
 
 [[package]]
 name = "aether-macros"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -159,7 +159,7 @@ dependencies = [
 
 [[package]]
 name = "aether-node"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "aether-ai",
  "aether-core",
@@ -175,12 +175,13 @@ dependencies = [
 
 [[package]]
 name = "aether-python"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "aether-ai",
  "aether-core",
  "pyo3",
  "rhai",
+ "serde_json",
  "tokio",
 ]
 

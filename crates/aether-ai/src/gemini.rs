@@ -155,13 +155,14 @@ impl AiProvider for GeminiProvider {
             contents,
             generation_config: Some(GenerationConfig {
                 temperature,
-                max_output_tokens: self.config.max_tokens,
+                max_output_tokens: request.max_tokens.or(self.config.max_tokens),
             }),
         };
 
+        let model = request.model.clone().unwrap_or_else(|| self.config.model.clone());
         let url = format!(
             "{}/{}:generateContent?key={}",
-            GEMINI_API_BASE, self.config.model, api_key
+            GEMINI_API_BASE, model, api_key
         );
 
         let response = self
@@ -232,7 +233,7 @@ impl AiProvider for GeminiProvider {
             }],
             generation_config: Some(GenerationConfig {
                 temperature,
-                max_output_tokens: config.max_tokens,
+                max_output_tokens: request.max_tokens.or(config.max_tokens),
             }),
         };
 
@@ -245,9 +246,10 @@ impl AiProvider for GeminiProvider {
                 }
             };
 
+            let model = request.model.clone().unwrap_or_else(|| config.model.clone());
             let url = format!(
                 "{}/{}:streamGenerateContent?alt=sse&key={}",
-                GEMINI_API_BASE, config.model, api_key
+                GEMINI_API_BASE, model, api_key
             );
 
             let response = client

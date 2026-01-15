@@ -15,4 +15,5 @@ pyo3 = { version = "0.20", features = ["extension-module", "abi3-py37"] }
 aether-core = { workspace = true }
 aether-ai = { workspace = true }
 tokio = { version = "1", features = ["full"] }
+serde_json = "1.0"
 rhai = "1.23"

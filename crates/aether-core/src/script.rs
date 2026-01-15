@@ -50,20 +50,26 @@ impl<P: AiProvider + 'static> AetherAgenticRuntime<P> {
         engine.register_fn("__aether_ask", move |prompt: String| -> Dynamic {
             let p = Arc::clone(&p_clone);
             
-            // Note: Since Rhai functions are typically synchronous, 
-            // and AiProvider::generate is async, we need a bridge.
-            // In a real implementation, we'd use a dedicated async engine 
-            // or a local runtime block.
-            
-            let handle = tokio::runtime::Handle::current();
-            let result = handle.block_on(async move {
-                let engine = InjectionEngine::new_raw(p);
-                engine.inject_raw(&prompt).await
-            });
+            // SAFETY: Rhai is synchronous, but InjectionEngine is asynchronous.
+            // Calling block_on directly within a Tokio runtime causes a panic.
+            // We spawn a separate thread and a dedicated single-threaded runtime 
+            // to safely bridge the sync/async gap.
+            let result = std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|e| AetherError::InjectionError(e.to_string()))?;
+                
+                rt.block_on(async move {
+                    let engine = InjectionEngine::new_raw(p);
+                    engine.inject_raw(&prompt).await
+                })
+            }).join();
 
             match result {
-                Ok(code) => Dynamic::from(code),
-                Err(e) => Dynamic::from(format!("Error: {}", e)),
+                Ok(Ok(code)) => Dynamic::from(code),
+                Ok(Err(e)) => Dynamic::from(format!("Error: {}", e)),
+                Err(_) => Dynamic::from("Error: AI thread panicked".to_string()),
             }
         });
 

@@ -158,8 +158,8 @@ impl AiProvider for AnthropicProvider {
 
         let temperature = request.slot.temperature.or(self.config.temperature);
         let api_request = MessageRequest {
-            model: self.config.model.clone(),
-            max_tokens: self.config.max_tokens.unwrap_or(4096),
+            model: request.model.clone().unwrap_or_else(|| self.config.model.clone()),
+            max_tokens: request.max_tokens.or(self.config.max_tokens).unwrap_or(4096),
             system,
             messages,
             temperature,
@@ -223,8 +223,8 @@ impl AiProvider for AnthropicProvider {
 
         let temperature = request.slot.temperature.or(config.temperature);
         let api_request = MessageRequest {
-            model: config.model.clone(),
-            max_tokens: config.max_tokens.unwrap_or(4096),
+            model: request.model.clone().unwrap_or_else(|| config.model.clone()),
+            max_tokens: request.max_tokens.or(config.max_tokens).unwrap_or(4096),
             system,
             messages: vec![Message {
                 role: "user".to_string(),

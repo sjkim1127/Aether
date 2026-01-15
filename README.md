@@ -1,402 +1,189 @@
-# Aether Codegen
+# Aether Codegen ⚡
+>
+> **The Infrastructure Layer for AI Code Generation**
 
-> AI-powered dynamic code injection framework for Rust
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.1.5-orange.svg)](https://crates.io/crates/aether-core)
+[![NPM](https://img.shields.io/badge/npm-v0.1.5-red.svg)](https://www.npmjs.com/package/@aether/codegen)
+[![PyPI](https://img.shields.io/badge/pypi-v0.1.5-blue.svg)](https://pypi.org/project/aether-codegen/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org/)
+**Aether** is a high-performance, type-safe framework designed to bridge the gap between *Creative LLMs* and *Rigid Software Engineering*.
 
-## Overview
+Unlike simple API wrappers, Aether provides a **structured runtime** for code generation, featuring **semantic caching**, **self-healing TDD loops**, and **protocol optimizations** (TOON) that save 40%+ on token costs.
 
-Aether is a high-performance, structured AI code injection framework. It is designed to bridge the gap between creative LLM generation and the strict requirements of source code.
+---
 
-For a detailed comparison on why Aether is superior to raw API calls, see [Aether vs Raw API](./COMPARISON.md).
+## 🚀 Why Aether?
 
-### Key Features
+| Feature | Raw API Calls | Aether Framework |
+| :--- | :--- | :--- |
+| **Reliability** | "Hope it works" flavor. | **Self-Healing**: Auto-compiles & fixes errors. |
+| **Latency** | 1-5s per request. | **<10ms** for cached semantic hits. |
+| **Cost** | Pay for every character. | **TOON Protocol**: ~40% token reduction. |
+| **Integration** | String concatenation spaghetti. | **Templates**: Clean `{{AI:slot}}` syntax. |
+| **Security** | Keys in env/code. | **Remote Resolution**: Keys never touch the binary. |
 
-- ✨ **Aether Shield (Anti-Reversing)**: Body-less functions with compile-time prompt encryption and runtime Rhai execution.
-- 🧪 **TDD Self-Healing**: Automatic functional verification via unit tests (Rust, JS, Python) with an iterative AI feedback loop.
-- ⚡ **Incremental Rendering**: Bit-exact change detection using RenderSessions for sub-second iterative development.
-- 📜 **Aether Script (.ae)**: Specialized agentic DSL with first-class AI directives (`@ai`) for complex logical workflows.
-- 🧠 **Semantic Caching**: Local vector-based caching for sub-millisecond responses.
-- 🚀 **TOON Protocol**: Token-Oriented Object Notation for extreme token efficiency.
-- 🔌 **Universal Providers**: Native support for OpenAI, Anthropic, Gemini, Ollama, and xAI Grok.
-- 🧩 **Native Bindings**: Python and Node.js integration for diverse ecosystems.
+---
 
-## Installation
+## � Installation & Quick Start
 
-Add to your `Cargo.toml`:
+Choose your ecosystem. Aether provides native bindings for maximum performance.
+
+### 🦀 Rust (Core)
+
+Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-aether-core = { path = "crates/aether-core" }
-aether-ai = { path = "crates/aether-ai" }
-aether-macros = { path = "crates/aether-macros" }
-tokio = { version = "1.43", features = ["full"] }
+aether-core = "0.1.5"
+aether-ai = "0.1.5"
+tokio = { version = "1", features = ["full"] }
 ```
 
-## Quick Start
-
-### One-Line Code Generation
+**main.rs**:
 
 ```rust
 use aether_ai::{openai, InjectionEngine, Template};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize provider with one line
-    let provider = openai("gpt-5.2-thinking")?;
-    
-    // Create template and inject code with one line
+    let provider = openai("gpt-5.1")?; // Or "claude-opus-4.5", "gemini-2.0-pro"
     let engine = InjectionEngine::new(provider);
-    let template = Template::new("<button>{{AI:button_text}}</button>")
-        .with_slot("button_text", "Generate a creative call-to-action text");
-    
-    let result = engine.render(&template).await?;
-    println!("{}", result);
-    
-    Ok(())
-}
-```
 
-### Using the `ai!` Macro
+    let template = Template::new("fn calculate(n: i32) -> i32 { {{AI:code}} }")
+        .with_slot("code", "Return nth fibonacci number recursively");
 
-```rust
-use aether_macros::ai;
-use aether_ai::OpenAiProvider;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let provider = OpenAiProvider::from_env()?;
-    
-    // One-line AI code generation
-    let code = ai!("Create a login form with email and password fields", provider).await?;
+    let code = engine.render(&template).await?;
     println!("{}", code);
-    
     Ok(())
 }
 ```
 
-### Template Syntax
-
-Templates use the `{{AI:slot_name}}` syntax for defining injection points:
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        {{AI:styles:css}}
-    </style>
-</head>
-<body>
-    <header>{{AI:header:html}}</header>
-    <main>{{AI:content:html}}</main>
-    <footer>{{AI:footer:html}}</footer>
-    <script>
-        {{AI:script:js}}
-    </script>
-</body>
-</html>
-```
-
-### Slot Kinds
-
-You can specify the type of code to generate:
-
-| Slot Kind | Syntax | Description |
-|-----------|--------|-------------|
-| Raw | `{{AI:name}}` | Raw code injection |
-| HTML | `{{AI:name:html}}` | HTML markup |
-| CSS | `{{AI:name:css}}` | CSS styles |
-| JavaScript | `{{AI:name:js}}` | JavaScript code |
-| Function | `{{AI:name:function}}` | Function definition |
-| Class | `{{AI:name:class}}` | Class/struct definition |
-| Component | `{{AI:name:component}}` | Full component |
-
-## Architecture
-
-```
-aether-codegen/
-├── crates/
-│   ├── aether-core/       # Core Engine & Infrastructure
-│   │   ├── validation.rs  # Self-Healing & Validation logic
-│   │   ├── cache.rs       # Semantic Caching with fastembed
-│   │   ├── toon.rs        # TOON Protocol implementation
-│   │   ├── engine.rs      # Main orchestrator
-│   │   └── ...
-│   ├── aether-ai/         # AI Provider Implementations
-│   │   ├── gemini.rs      # Google Gemini (v1beta/v1)
-│   │   ├── grok.rs        # xAI Grok (OpenAI-compatible)
-│   │   ├── openai.rs      # OpenAI GPT series
-│   │   └── ...
-│   └── aether-node/       # NAPI-RS Node.js Bindings
-└── examples/              # Usage patterns & demos
-```
-
-## AI Providers
-
-### Google Gemini
-
-```rust
-use aether_ai::GeminiProvider;
-
-// From environment (GOOGLE_API_KEY)
-let provider = GeminiProvider::from_env()?;
-
-// Or use the latest high-speed model
-let provider = aether_ai::gemini("gemini-3-flash-preview")?;
-```
-
-### xAI Grok
-
-```rust
-// Grok uses the OpenAI-compatible implementation
-let provider = aether_ai::grok("grok-4")?;
-```
-
-### OpenAI & Anthropic
-
-- **OpenAI**: Supports `gpt-5.2`, `gpt-5.1`, etc.
-- **Anthropic**: Supports `claude-4.5-sonnet-latest`, `claude-4.5-opus-latest`.
-
-### Ollama (Local)
-
-```rust
-use aether_ai::OllamaProvider;
-let provider = OllamaProvider::new("codellama");
-```
-
-## Advanced Usage
-
-### Context-Aware Generation
-
-```rust
-use aether_core::{InjectionContext, InjectionEngine, Template};
-
-let context = InjectionContext::new()
-    .with_project("my-app")
-    .with_language("typescript")
-    .with_framework("react");
-
-let engine = InjectionEngine::new(provider)
-    .with_context(context);
-
-let template = Template::new("{{AI:component}}")
-    .with_slot("component", "Create a user profile card component");
-
-let result = engine.render(&template).await?;
-```
-
-### Slot Constraints
-
-```rust
-use aether_core::{Slot, SlotConstraints, SlotKind};
-
-let slot = Slot::new("code", "Generate a helper function")
-    .with_kind(SlotKind::Function)
-    .with_constraints(
-        SlotConstraints::new()
-            .max_lines(50)
-            .language("rust")
-            .forbid_pattern(r"unsafe\s*\{")  // No unsafe blocks
-    );
-```
-
-### Parallel Generation
-
-```rust
-let engine = InjectionEngine::new(provider)
-    .parallel(true)  // Enable parallel slot generation
-    .max_retries(3); // Retry failed generations
-
-let template = Template::new("{{AI:header}} {{AI:content}} {{AI:footer}}");
-let result = engine.render(&template).await?; // All slots generated in parallel
-```
-
-### Advanced Workflow (Healing + Cache + TOON)
-
-For complex use cases requiring high reliability and cost-efficiency:
-
-```rust
-let engine = InjectionEngine::new(provider)
-    .with_cache(SemanticCache::new()?) 
-    .with_validator(RustValidator)    
-    .with_toon(true);
-
-let template = Template::new("...")
-    .configure_slot(
-        Slot::new("logic", "Math logic")
-            .with_temperature(0.0) // Be strict
-    );
-```
-
-See [examples/advanced_workflow.rs](./examples/advanced_workflow.rs) for a complete implementation.
-
-### 🛡️ Aether Shield: The Hacker's Nightmare
-
-Protect your critical business logic by making it **non-existent** in the binary. Use the `#[aether_secure]` macro to fetch and execute logic at runtime.
-
-```rust
-use aether_macros::aether_secure;
-
-#[aether_secure(prompt = "Calculate premium discount based on user tier")]
-async fn get_discount(tier: i64) -> i64;
-
-// At runtime:
-// 1. Aether calls AI for a Rhai script.
-// 2. The script is executed in a secure sandbox.
-// 3. Result is returned. No local logic to reverse engineer!
-```
-
-See [examples/secure_logic.rs](./examples/secure_logic.rs) for a live demo.
-
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key | - |
-| `ANTHROPIC_API_KEY` | Anthropic API key | - |
-| `GOOGLE_API_KEY` | Google Gemini API key | - |
-| `XAI_API_KEY` | xAI Grok API key | - |
-| `OLLAMA_MODEL` | Ollama model name | `codellama` |
-| `OLLAMA_URL` | Ollama API URL | `http://localhost:11434/api/generate` |
-
-## Node.js Bindings
-
-Aether is also available as a native Node.js module via NAPI-RS.
-
-### Installation
+### 🐢 Node.js (TypeScript)
 
 ```bash
 npm install @aether/codegen
 ```
 
-### Quick Start (JavaScript/TypeScript)
-
-```javascript
-const { AetherEngine, Template, generate } = require('@aether/codegen');
-
-// One-line code generation
-const code = await generate("Create a login form with validation");
-console.log(code);
-
-// Enable Premium Features
-const engine = AetherEngine.openai("gpt-4o");
-engine.setHeal(true);  // Enable Self-Healing
-engine.setCache(true); // Enable Semantic Cache
-engine.setToon(true);  // Enable TOON Protocol
-
-const template = new Template("<div>{{AI:content}}</div>");
-template.setSlot("content", "Generate a welcome message");
-const result = await engine.render(template);
-
-// Incremental Rendering (using RenderSession)
-const { RenderSession } = require('@aether/codegen');
-const session = new RenderSession();
-const incrementalResult = await engine.renderIncremental(template, session);
-console.log(`Cached slots: ${session.cachedCount}`);
-```
-
-### TypeScript Support
-
-Full TypeScript definitions are included:
+**index.ts**:
 
 ```typescript
-import { AetherEngine, Template, generate, renderTemplate } from '@aether/codegen';
+import { AetherEngine, Template } from '@aether/codegen';
 
-// Type-safe API
-const engine: AetherEngine = AetherEngine.anthropic("claude-opus-4-5");
-engine.setContext("my-app", "typescript", "react");
+async function main() {
+    // Enable premium features: Caching, Healing, Parallelism
+    const engine = AetherEngine.openai("gpt-5.1");
+    engine.setCache(true);
+    engine.setHeal(true);
 
-const html: string = await renderTemplate(
-  "<header>{{AI:nav}}</header>",
-  { nav: "Generate a responsive navigation bar" }
-);
+    const tmpl = new Template("export const {{AI:name}} = (props) => { {{AI:body}} }");
+    tmpl.addSlot("name", "Name for a login component");
+    tmpl.addSlot("body", "React component logic with tailwind styles");
+
+    const result = await engine.render(tmpl);
+    console.log(result);
+}
+main();
 ```
 
-### Building from Source
-
-```bash
-cd crates/aether-node
-npm install
-npm run build
-```
-
-## Python Bindings
-
-Aether provides high-performance Python bindings, allowing you to use the Rust engine directly from Python scripts.
-
-### Installation
+### 🐍 Python
 
 ```bash
 pip install aether-codegen
 ```
 
-### Quick Start (Python)
+**app.py**:
 
 ```python
 import aether
-import os
+import asyncio
 
-# Initialize Engine (supports OpenAI, Anthropic, Gemini, Ollama)
-engine = aether.Engine("anthropic", model="claude-3-opus-20240229")
+async def main():
+    engine = aether.Engine("anthropic", model="claude-sonnet-4.5")
+    engine.set_toon(True) # Enable optimization
+    
+    # Simple one-line generation
+    code = await aether.generate("Write a Python decorator for timing functions")
+    print(code)
 
-# Create a template
-template = aether.Template("def fibonacci(n): {{AI:code}}")
-template.add_slot("code", "Implement recursive Fibonacci calculation", 0.7)
-
-# Render using the Rust core engine
-result = engine.render(template)
-print(result)
-
-# Incremental Rendering (extremely fast for iterative changes)
-session = aether.RenderSession()
-result2 = engine.render_incremental(template, session)
-print(f"Cached items: {session.cached_count()}")
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-### Aether Shield for Python
+---
 
-You can use Aether to protect Python applications by offloading logic to the AI runtime.
+## 🛠️ Core Features
 
-```python
-# The verification logic exists ONLY in the AI model, not in your code!
-oracle_template = aether.Template("{{AI:check}}")
-oracle_template.add_slot("check", 
-    f"Verify if '{user_input}' is the correct answer to the riddle. Check carefully.", 
-    0.0
-)
-result = engine.render(oracle_template)
-if "ACCESS_GRANTED" in result:
-    unlock_vault()
+### 1. Templates & Slots
+
+Don't prompt-engineer strings. Use **Templates**.
+
+```html
+<div class="card">
+  <!-- Raw injection -->
+  <h1>{{AI:title}}</h1>
+  
+  <!-- Kind-aware injection (enforces valid HTML) -->
+  <div class="content">{{AI:body:html}}</div>
+  
+  <!-- Strict logic injection (Temperature 0.0) -->
+  <script>
+    {{AI:validation_logic:js}}
+  </script>
+</div>
 ```
 
-### Building from Source
+### 2. SCSEM (Semantic Caching)
 
-```bash
-cd crates/aether-python
-maturin build --release
-pip install target/wheels/aether_codegen-*.whl
-```
+Aether includes a local Vector Database (using `fastembed`).
 
-## Examples
+- **Hit**: If you ask "Make a login button" and later ask "Create a sign-in button", Aether understands they are semantically identical and returns the cached code instantly (0ms API cost).
+- **Miss**: Falls back to the LLM.
 
-See the [examples](./examples) directory for more usage patterns:
+### 3. TOON Protocol (Token-Oriented Object Notation)
 
-- `advanced_workflow.rs` - Full suite of premium features (Cache, Heal, TOON)
-- `basic_web.rs` - Basic web page generation
-- `one_line.rs` - One-line code generation
-- `local_ollama.rs` - Local AI with Ollama
+A custom serialization format that replaces JSON for context injection.
 
-## Documentation
+- **JSON**: `[{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}]` (Tokens: High)
+- **TOON**: `{id,name}: 1,foo | 2,bar` (Tokens: Low)
+- **Result**: **30-60% cost reduction** on context-heavy prompts.
 
-- [Architecture Overview](./docs/ARCHITECTURE.md) - How Aether works internally
-- [Aether vs Raw API](./docs/COMPARISON.md) - Why use a framework?
-- [Changelog](./docs/CHANGELOG.md) - Recent updates and version history
-- [API Reference (Node.js)](./crates/aether-node/index.d.ts) - TypeScript definitions
+### 4. Self-Healing (TDD)
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+When `healing` is enabled:
 
-## License
+1. AI generates code.
+2. Aether compiles it (Rust/TS/Python/Go) in a sandbox.
+3. If it fails, Aether captures the error log.
+4. Aether feeds the error back to the AI: *"You made error X on line Y. Fix it."*
+5. Repeat until success or `max_retries`.
 
-This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+---
+
+## 📚 Documentation
+
+Detailed documentation is available in the [Wiki Repository](./wiki_repo).
+
+- [**Architecture**](./wiki_repo/architecture.md): How the Injection Engine works.
+- [**AI Providers**](./wiki_repo/ai-providers.md): Configuring OpenAI, Claude, Gemini, Ollama, Grok.
+- [**Template Syntax**](./wiki_repo/template-syntax.md): Full guide to slots and constraints.
+- [**Comparisons**](./wiki_repo/COMPARISON.md): Aether vs LangChain vs Raw API.
+- [**Roadmap**](./wiki_repo/ROADMAP.md): Future plans.
+
+---
+
+## 🤝 Supported Providers
+
+| Provider | Key Env Var | Models |
+| :--- | :--- | :--- |
+| **OpenAI** | `OPENAI_API_KEY` | `gpt-5.1` (flagship), `gpt-5.2` (reasoning) |
+| **Anthropic** | `ANTHROPIC_API_KEY` | `claude-opus-4.5`, `claude-sonnet-4.5` |
+| **Google** | `GOOGLE_API_KEY` | `gemini-2.0-pro`, `gemini-2.0-flash` |
+| **xAI** | `XAI_API_KEY` | `grok-3` |
+| **Ollama** | - | `llama-4`, `mistral-large-v3` |
+
+---
+
+## 📜 License
+
+MIT License © 2026 Aether Team.

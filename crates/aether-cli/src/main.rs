@@ -145,7 +145,6 @@ async fn main() -> Result<()> {
                 }
             };
 
-            use aether_core::AetherConfig;
             let mut config = AetherConfig::from_env()
                 .with_healing(*heal)
                 .with_toon(*toon)
@@ -156,7 +155,7 @@ async fn main() -> Result<()> {
                 config = config.with_cache(true);
             }
 
-            let mut engine = InjectionEngine::with_config(provider_obj, config);
+            let mut engine = InjectionEngine::with_config_arc(provider_obj, config);
             
             // Setup Inspector if enabled
             if *inspect {
@@ -173,10 +172,6 @@ async fn main() -> Result<()> {
                 
                 engine = engine.with_observer(inspector);
                 info!("🚀 Aether Inspector UI active at http://localhost:{}", port);
-            }
-
-            if *heal {
-                engine = engine.with_validator(aether_core::validation::MultiValidator::new());
             }
 
             run_generation(engine, tmpl, output, *stream).await?;

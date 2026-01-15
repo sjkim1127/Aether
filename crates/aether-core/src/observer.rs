@@ -14,6 +14,9 @@ pub trait EngineObserver: Send + Sync {
     
     /// Called when a generation fails permanently.
     fn on_failure(&self, id: &str, error: &str);
+
+    /// Called to report arbitrary metadata for an event.
+    fn on_metadata(&self, _id: &str, _key: &str, _value: serde_json::Value) {}
 }
 
 pub type ObserverPtr = Arc<dyn EngineObserver>;
