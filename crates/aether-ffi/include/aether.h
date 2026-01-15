@@ -80,6 +80,49 @@ struct AetherEngine *aether_create_engine(const struct AetherProvider *provider)
 void aether_free_engine(struct AetherEngine *engine);
 
 /**
+ * Enable Self-Healing on the engine.
+ * When enabled, generated code is validated and regenerated on errors.
+ *
+ * # Arguments
+ * * `engine` - Engine handle (must be mutable)
+ *
+ * # Returns
+ * true on success, false on failure
+ */
+bool aether_engine_enable_healing(struct AetherEngine *engine);
+
+/**
+ * Enable Semantic Caching on the engine.
+ * Reduces API costs by caching similar prompts.
+ *
+ * # Arguments
+ * * `engine` - Engine handle (must be mutable)
+ *
+ * # Returns
+ * true on success, false on failure
+ */
+bool aether_engine_enable_cache(struct AetherEngine *engine);
+
+/**
+ * Enable TOON Protocol on the engine.
+ * Compresses context for token efficiency.
+ *
+ * # Arguments
+ * * `engine` - Engine handle (must be mutable)
+ * * `enabled` - Whether to enable TOON
+ */
+void aether_engine_set_toon(struct AetherEngine *engine, bool enabled);
+
+/**
+ * Set the maximum retry count for Self-Healing.
+ *
+ * # Arguments
+ * * `engine` - Engine handle
+ * * `max_retries` - Maximum number of healing attempts (default: 3)
+ */
+void aether_engine_set_max_retries(struct AetherEngine *engine, uint32_t max_retries);
+
+/**
  * Create a template from content string.
  *
  * # Arguments

@@ -45,7 +45,11 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::Arc;
 
-use aether_core::{InjectionEngine, Template, AiProvider};
+use aether_core::{
+    InjectionEngine, Template, AiProvider,
+    validation::MultiValidator,
+    cache::SemanticCache,
+};
 use once_cell::sync::Lazy;
 use tokio::runtime::Runtime;
 
@@ -75,6 +79,37 @@ pub struct AetherProvider {
 /// Opaque engine handle
 pub struct AetherEngine {
     inner: InjectionEngine<Arc<dyn AiProvider + Send + Sync>>,
+    provider: Arc<dyn AiProvider + Send + Sync>,
+    healing_enabled: bool,
+    cache_enabled: bool,
+    toon_enabled: bool,
+    max_retries: usize,
+}
+
+impl AetherEngine {
+    fn rebuild(&mut self) {
+        let mut engine = InjectionEngine::new(self.provider.clone());
+        
+        if self.healing_enabled {
+            engine = engine.with_validator(MultiValidator::new());
+        }
+        
+        if self.cache_enabled {
+            if let Ok(cache) = SemanticCache::new() {
+                engine = engine.with_cache(cache);
+            }
+        }
+        
+        if self.toon_enabled {
+            engine = engine.with_toon(true);
+        }
+        
+        if self.max_retries > 0 {
+            engine = engine.max_retries(self.max_retries as u32);
+        }
+        
+        self.inner = engine;
+    }
 }
 
 /// Opaque template handle
@@ -231,9 +266,17 @@ pub extern "C" fn aether_create_engine(provider: *const AetherProvider) -> *mut 
     }
 
     let provider_ref = unsafe { &*provider };
-    let engine = InjectionEngine::new(provider_ref.inner.clone());
+    let provider_arc = provider_ref.inner.clone();
+    let engine = InjectionEngine::new(provider_arc.clone());
 
-    let handle = Box::new(AetherEngine { inner: engine });
+    let handle = Box::new(AetherEngine {
+        inner: engine,
+        provider: provider_arc,
+        healing_enabled: false,
+        cache_enabled: false,
+        toon_enabled: false,
+        max_retries: 0,
+    });
     Box::into_raw(handle)
 }
 
@@ -244,6 +287,82 @@ pub extern "C" fn aether_free_engine(engine: *mut AetherEngine) {
         unsafe { drop(Box::from_raw(engine)) };
     }
 }
+
+/// Enable Self-Healing on the engine.
+/// When enabled, generated code is validated and regenerated on errors.
+///
+/// # Arguments
+/// * `engine` - Engine handle (must be mutable)
+///
+/// # Returns
+/// true on success, false on failure
+#[no_mangle]
+pub extern "C" fn aether_engine_enable_healing(engine: *mut AetherEngine) -> bool {
+    if engine.is_null() {
+        set_last_error("Engine is null".to_string());
+        return false;
+    }
+
+    let engine_ref = unsafe { &mut *engine };
+    engine_ref.healing_enabled = true;
+    engine_ref.rebuild();
+    true
+}
+
+/// Enable Semantic Caching on the engine.
+/// Reduces API costs by caching similar prompts.
+///
+/// # Arguments
+/// * `engine` - Engine handle (must be mutable)
+///
+/// # Returns
+/// true on success, false on failure
+#[no_mangle]
+pub extern "C" fn aether_engine_enable_cache(engine: *mut AetherEngine) -> bool {
+    if engine.is_null() {
+        set_last_error("Engine is null".to_string());
+        return false;
+    }
+
+    let engine_ref = unsafe { &mut *engine };
+    engine_ref.cache_enabled = true;
+    engine_ref.rebuild();
+    true
+}
+
+/// Enable TOON Protocol on the engine.
+/// Compresses context for token efficiency.
+///
+/// # Arguments
+/// * `engine` - Engine handle (must be mutable)
+/// * `enabled` - Whether to enable TOON
+#[no_mangle]
+pub extern "C" fn aether_engine_set_toon(engine: *mut AetherEngine, enabled: bool) {
+    if engine.is_null() {
+        return;
+    }
+
+    let engine_ref = unsafe { &mut *engine };
+    engine_ref.toon_enabled = enabled;
+    engine_ref.rebuild();
+}
+
+/// Set the maximum retry count for Self-Healing.
+///
+/// # Arguments
+/// * `engine` - Engine handle
+/// * `max_retries` - Maximum number of healing attempts (default: 3)
+#[no_mangle]
+pub extern "C" fn aether_engine_set_max_retries(engine: *mut AetherEngine, max_retries: u32) {
+    if engine.is_null() {
+        return;
+    }
+
+    let engine_ref = unsafe { &mut *engine };
+    engine_ref.max_retries = max_retries as usize;
+    engine_ref.rebuild();
+}
+
 
 // ============================================================
 // Template Operations
