@@ -1,0 +1,12 @@
+[package]
+name = "ghost_shellv2"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aether-ai = { path = "../../crates/aether-ai" }
+aether-core = { path = "../../crates/aether-core" }
+tokio = { workspace = true }
+colored = "2.1"
+dotenvy = "0.15"
+rhai = "1.20"

@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = [
+    "ghost_shellv2",
+]
+
+[workspace.dependencies]
+tokio = { version = "1.49", features = ["full"] }
