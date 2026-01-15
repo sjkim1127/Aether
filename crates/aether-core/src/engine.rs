@@ -5,6 +5,7 @@
 use crate::{
     AetherError, AiProvider, InjectionContext, Result, Template,
     provider::{GenerationRequest, GenerationResponse},
+    config::AetherConfig,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -20,16 +21,17 @@ use crate::toon::Toon;
 /// # Example
 ///
 /// ```rust,ignore
-/// use aether_core::{InjectionEngine, Template};
+/// use aether_core::{InjectionEngine, Template, AetherConfig};
 /// use aether_ai::OpenAiProvider;
 ///
 /// let provider = OpenAiProvider::from_env()?;
+/// 
+/// // Using config
+/// let config = AetherConfig::from_env();
+/// let engine = InjectionEngine::with_config(provider, config);
+///
+/// // Or simple
 /// let engine = InjectionEngine::new(provider);
-///
-/// let template = Template::new("<div>{{AI:content}}</div>")
-///     .with_slot("content", "Generate a welcome message");
-///
-/// let result = engine.render(&template).await?;
 /// ```
 pub struct InjectionEngine<P: AiProvider> {
     /// The AI provider for code generation.
@@ -44,6 +46,9 @@ pub struct InjectionEngine<P: AiProvider> {
     /// Whether to use TOON format for context injection.
     use_toon: bool,
 
+    /// Auto TOON threshold (characters).
+    auto_toon_threshold: Option<usize>,
+
     /// Global context applied to all generations.
     global_context: InjectionContext,
 
@@ -55,16 +60,22 @@ pub struct InjectionEngine<P: AiProvider> {
 }
 
 impl<P: AiProvider + 'static> InjectionEngine<P> {
-    /// Create a new injection engine with the given provider.
+    /// Create a new injection engine with the given provider and default config.
     pub fn new(provider: P) -> Self {
+        Self::with_config(provider, AetherConfig::default())
+    }
+
+    /// Create a new injection engine with the given provider and config.
+    pub fn with_config(provider: P, config: AetherConfig) -> Self {
         Self {
             provider: Arc::new(provider),
             validator: None,
             cache: None,
-            use_toon: false,
+            use_toon: config.toon_enabled,
+            auto_toon_threshold: config.auto_toon_threshold,
             global_context: InjectionContext::default(),
-            parallel: true,
-            max_retries: 2,
+            parallel: config.parallel,
+            max_retries: config.max_retries,
         }
     }
 
@@ -129,8 +140,6 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
         template.render(&injections)
     }
 
-    /// Generate code for all slots in a template.
-    /// Generate code for all slots in a template.
     async fn generate_all(
         &self,
         template: &Template,
@@ -138,14 +147,24 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
     ) -> Result<HashMap<String, String>> {
         let mut injections = HashMap::new();
 
-        let context_prompt = if self.use_toon {
-            // TOON optimization
-            let toon_ctx = Toon::serialize(&serde_json::to_value(&self.global_context).unwrap_or(serde_json::json!({})));
-            format!("[CONTEXT:TOON]\n{}\n", toon_ctx)
-        } else if let Some(ref ctx) = extra_context {
+        // Build base context first to check length
+        let base_context = if let Some(ref ctx) = extra_context {
             format!("{}\n{}", self.global_context.to_prompt(), ctx.to_prompt())
         } else {
             self.global_context.to_prompt()
+        };
+
+        // Determine if TOON should be used (explicit or auto-threshold)
+        let should_use_toon = self.use_toon || self.auto_toon_threshold
+            .map(|threshold| base_context.len() >= threshold)
+            .unwrap_or(false);
+
+        let context_prompt = if should_use_toon {
+            // TOON optimization - compress context
+            let toon_ctx = Toon::serialize(&serde_json::to_value(&self.global_context).unwrap_or(serde_json::json!({})));
+            format!("[CONTEXT:TOON]\n{}\n[Note: TOON is a compact key:value format to save tokens]\n", toon_ctx)
+        } else {
+            base_context
         };
 
         let mut context_prompt = context_prompt;

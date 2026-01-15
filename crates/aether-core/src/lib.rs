@@ -33,6 +33,7 @@ pub mod validation;
 pub mod cache;
 pub mod toon;
 pub mod runtime;
+pub mod config;
 
 pub use error::{AetherError, Result};
 pub use template::Template;
@@ -41,6 +42,7 @@ pub use provider::{AiProvider, ProviderConfig};
 pub use context::InjectionContext;
 pub use engine::InjectionEngine;
 pub use runtime::AetherRuntime;
+pub use config::AetherConfig;
 
 /// Re-export commonly used types
 pub mod prelude {
