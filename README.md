@@ -13,14 +13,14 @@ For a detailed comparison on why Aether is superior to raw API calls, see [Aethe
 
 ### Key Features
 
-- ✨ **Aether Shield (Anti-Reversing)**: Body-less functions that execute AI-generated scripts in a secure sandbox at runtime.
-- 🧪 **Self-Healing (Alpha)**: Automatic error detection and self-correction loop for "guaranteed" valid code.
-- 🧠 **Semantic Caching**: Local vector-based caching that serves sub-millisecond responses for repeated tasks.
-- 🚀 **TOON Protocol**: Token-Oriented Object Notation for extreme token efficiency and AI "understanding."
-- 📡 **Live Streaming**: Real-time code generation for interactive end-user experiences.
+- ✨ **Aether Shield (Anti-Reversing)**: Body-less functions with compile-time prompt encryption and runtime Rhai execution.
+- 🧪 **TDD Self-Healing**: Automatic functional verification via unit tests (Rust, JS, Python) with an iterative AI feedback loop.
+- ⚡ **Incremental Rendering**: Bit-exact change detection using RenderSessions for sub-second iterative development.
+- 📜 **Aether Script (.ae)**: Specialized agentic DSL with first-class AI directives (`@ai`) for complex logical workflows.
+- 🧠 **Semantic Caching**: Local vector-based caching for sub-millisecond responses.
+- 🚀 **TOON Protocol**: Token-Oriented Object Notation for extreme token efficiency.
 - 🔌 **Universal Providers**: Native support for OpenAI, Anthropic, Gemini, Ollama, and xAI Grok.
-- ⚡ **Parallel Generation**: Concurrent slot processing for maximum rendering speed.
-- 🧩 **Native Bindings**: High-performance C++ bindings for the Node.js / TypeScript ecosystem.
+- 🧩 **Native Bindings**: Python and Node.js integration for diverse ecosystems.
 
 ## Installation
 
@@ -164,7 +164,7 @@ let provider = aether_ai::grok("grok-4")?;
 ```rust
 use aether_ai::OllamaProvider;
 let provider = OllamaProvider::new("codellama");
-``` 
+```
 
 ## Advanced Usage
 
