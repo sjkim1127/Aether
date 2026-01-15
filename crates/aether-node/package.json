@@ -32,13 +32,10 @@
         "node": ">= 18"
     },
     "napi": {
-        "name": "aether-codegen",
-        "triples": {
-            "defaults": false,
-            "additional": [
-                "x86_64-pc-windows-msvc"
-            ]
-        }
+        "binaryName": "aether-codegen",
+        "targets": [
+            "x86_64-pc-windows-msvc"
+        ]
     },
     "files": [
         "index.js",
@@ -51,6 +48,6 @@
         "test": "node test.js"
     },
     "devDependencies": {
-        "@napi-rs/cli": "^2.18.0"
+        "@napi-rs/cli": "^3.5.1"
     }
 }

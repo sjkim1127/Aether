@@ -31,9 +31,11 @@ use aether_core::{
     Slot as CoreSlot,
     SlotKind as CoreSlotKind,
     Template as CoreTemplate,
+    AetherRuntime,
 };
 use aether_ai::{OpenAiProvider, AnthropicProvider, OllamaProvider};
 use aether_core::AiProvider;
+use rhai::Dynamic;
 
 /// JavaScript-accessible Template class.
 #[napi]
@@ -307,6 +309,48 @@ impl AetherEngine {
     #[napi]
     pub fn set_toon(&mut self, enabled: bool) {
         self.toon = enabled;
+    }
+
+    /// Execute a Rhai script directly (Aether Shield core functionality).
+    /// 
+    /// # Arguments
+    /// * `script` - The Rhai script to execute.
+    /// * `inputs_json` - Optional JSON string of input variables (e.g., '{"x": 10, "name": "Alice"}').
+    /// 
+    /// # Returns
+    /// The result of the script execution as a string.
+    #[napi]
+    pub fn execute_script(&self, script: String, inputs_json: Option<String>) -> Result<String> {
+        let runtime = AetherRuntime::new();
+        
+        let mut rhai_inputs: HashMap<String, Dynamic> = HashMap::new();
+        
+        if let Some(json_str) = inputs_json {
+            if let Ok(parsed) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&json_str) {
+                for (key, value) in parsed {
+                    let dyn_val = match value {
+                        serde_json::Value::Bool(b) => Dynamic::from(b),
+                        serde_json::Value::Number(n) => {
+                            if let Some(i) = n.as_i64() {
+                                Dynamic::from(i)
+                            } else if let Some(f) = n.as_f64() {
+                                Dynamic::from(f)
+                            } else {
+                                Dynamic::from(0)
+                            }
+                        },
+                        serde_json::Value::String(s) => Dynamic::from(s),
+                        _ => continue,
+                    };
+                    rhai_inputs.insert(key, dyn_val);
+                }
+            }
+        }
+
+        let result = runtime.execute(&script, rhai_inputs)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+
+        Ok(result.to_string())
     }
 
     /// Generate code with a simple prompt (one-liner).
