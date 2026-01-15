@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aether All-in-One Publish Script (v0.1.4)
+Aether All-in-One Publish Script (v0.1.5)
 Automates publishing to Crates.io, PyPI, and NPM.
 """
 
@@ -156,7 +156,7 @@ if __name__ == "__main__":
         
         load_env()
         
-        log("🚀 Starting Aether v0.1.4 Deployment Stack", "SUCCESS")
+        log("🚀 Starting Aether v0.1.5 Deployment Stack", "SUCCESS")
         
         publish_rust()
         publish_python()
