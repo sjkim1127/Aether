@@ -465,6 +465,101 @@ impl AetherEngine {
         engine.render(template).await
             .map_err(|e| Error::from_reason(e.to_string()))
     }
+
+    /// Get streaming chunks as an array (alternative to callback-based streaming).
+    /// Returns an array of strings, each representing a chunk of the generated content.
+    #[napi]
+    pub async fn get_stream_chunks(
+        &self,
+        template: &Template,
+        slot_name: String,
+    ) -> Result<Vec<String>> {
+        use futures::StreamExt;
+
+        match self.provider_type {
+            ProviderType::OpenAI => {
+                let api_key = self.api_key.clone()
+                    .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+                    .unwrap_or_default();
+                
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                let provider = OpenAiProvider::new(config)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                
+                self.collect_stream_chunks(&template.inner, &slot_name, provider).await
+            }
+            ProviderType::Anthropic => {
+                let api_key = self.api_key.clone()
+                    .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+                    .unwrap_or_default();
+                
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                let provider = AnthropicProvider::new(config)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                
+                self.collect_stream_chunks(&template.inner, &slot_name, provider).await
+            }
+            ProviderType::Gemini => {
+                let api_key = self.api_key.clone()
+                    .or_else(|| std::env::var("GOOGLE_API_KEY").ok())
+                    .unwrap_or_default();
+                
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                let provider = aether_ai::GeminiProvider::new(config)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                
+                self.collect_stream_chunks(&template.inner, &slot_name, provider).await
+            }
+            ProviderType::Ollama => {
+                let provider = OllamaProvider::new(&self.model);
+                self.collect_stream_chunks(&template.inner, &slot_name, provider).await
+            }
+            ProviderType::Grok => {
+                let api_key = self.api_key.clone()
+                    .or_else(|| std::env::var("XAI_API_KEY").ok())
+                    .unwrap_or_default();
+                
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model)
+                    .with_base_url("https://api.x.ai/v1/chat/completions");
+                let provider = OpenAiProvider::new(config)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                
+                self.collect_stream_chunks(&template.inner, &slot_name, provider).await
+            }
+        }
+    }
+
+    /// Collect stream chunks from a provider.
+    async fn collect_stream_chunks<P: AiProvider + 'static>(
+        &self,
+        template: &CoreTemplate,
+        slot_name: &str,
+        provider: P,
+    ) -> Result<Vec<String>> {
+        use futures::StreamExt;
+
+        let engine = CoreEngine::new(provider);
+        
+        match engine.generate_slot_stream(template, slot_name) {
+            Ok(mut stream) => {
+                let mut chunks = Vec::new();
+                
+                while let Some(result) = stream.next().await {
+                    match result {
+                        Ok(chunk) => {
+                            chunks.push(chunk.delta);
+                        }
+                        Err(e) => {
+                            return Err(Error::from_reason(e.to_string()));
+                        }
+                    }
+                }
+                
+                Ok(chunks)
+            }
+            Err(e) => Err(Error::from_reason(e.to_string()))
+        }
+    }
 }
 
 /// One-line code generation function.

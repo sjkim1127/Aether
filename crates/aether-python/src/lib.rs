@@ -205,6 +205,76 @@ impl Engine {
 
         Ok(result.to_string())
     }
+
+    /// Render a template with streaming output.
+    /// 
+    /// # Arguments
+    /// * `template` - The template to render.
+    /// * `slot_name` - The name of the slot to stream (must have exactly one slot).
+    /// * `callback` - A Python callable that receives each chunk as a string.
+    /// 
+    /// # Example
+    /// ```python
+    /// def on_chunk(chunk):
+    ///     print(chunk, end='', flush=True)
+    /// 
+    /// engine.render_stream(template, "code", on_chunk)
+    /// ```
+    #[pyo3(signature = (template, slot_name, callback))]
+    fn render_stream(
+        &self,
+        py: Python<'_>,
+        template: &Template,
+        slot_name: String,
+        callback: PyObject,
+    ) -> PyResult<String> {
+        use futures::StreamExt;
+        
+        let template_inner = template.inner.clone();
+
+        self.runtime.block_on(async {
+            macro_rules! stream_render {
+                ($provider:expr) => {{
+                    let engine = InjectionEngine::new($provider.clone());
+                    
+                    let stream_result = engine.generate_slot_stream(&template_inner, &slot_name);
+                    match stream_result {
+                        Ok(mut stream) => {
+                            let mut full_result = String::new();
+                            
+                            while let Some(result) = stream.next().await {
+                                match result {
+                                    Ok(chunk) => {
+                                        full_result.push_str(&chunk.delta);
+                                        
+                                        // Call Python callback with the chunk
+                                        Python::with_gil(|py| {
+                                            let _ = callback.call1(py, (chunk.delta.clone(),));
+                                        });
+                                    }
+                                    Err(e) => {
+                                        return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                                            e.to_string()
+                                        ));
+                                    }
+                                }
+                            }
+                            
+                            Ok(full_result)
+                        }
+                        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+                    }
+                }};
+            }
+
+            match &self.provider {
+                ProviderKind::OpenAi(p) => stream_render!(p),
+                ProviderKind::Anthropic(p) => stream_render!(p),
+                ProviderKind::Gemini(p) => stream_render!(p),
+                ProviderKind::Ollama(p) => stream_render!(p),
+            }
+        })
+    }
 }
 
 // ============================================================
