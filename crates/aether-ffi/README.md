@@ -102,10 +102,44 @@ target_link_libraries(your_target PUBLIC ${AETHER_LIB})
 | `aether_template_add_slot(template, name, prompt)` | Add slot to template |
 | `aether_free_template(template)` | Free template handle |
 | `aether_render(engine, template)` | Render template (AI generation) |
+| `aether_render_stream(engine, template, slot_name, callback, user_data)` | **Streaming** render with callback |
 | `aether_generate(provider, prompt)` | One-shot code generation |
 | `aether_free_string(s)` | Free string allocated by Aether |
 | `aether_last_error()` | Get last error message |
 | `aether_version()` | Get Aether version string |
+
+## Streaming Example (C++)
+
+```cpp
+#include <iostream>
+#include "aether.h"
+
+// Callback function called for each generated chunk
+bool on_chunk(const char* chunk, void* user_data) {
+    std::cout << chunk << std::flush;  // Print chunk immediately
+    return true;  // Return true to continue, false to abort
+}
+
+int main() {
+    AetherProvider* provider = aether_create_openai_provider("gpt-4o");
+    AetherEngine* engine = aether_create_engine(provider);
+    aether_engine_enable_healing(engine);
+
+    AetherTemplate* tmpl = aether_create_template("{{AI:code}}");
+    aether_template_add_slot(tmpl, "code", "Write a hello world function");
+
+    // Streaming render - on_chunk is called for each piece of generated text
+    char* result = aether_render_stream(engine, tmpl, "code", on_chunk, nullptr);
+    
+    std::cout << "\n\n--- Full result ---\n" << result << std::endl;
+
+    aether_free_string(result);
+    aether_free_template(tmpl);
+    aether_free_engine(engine);
+    aether_free_provider(provider);
+    return 0;
+}
+```
 
 ## Thread Safety
 

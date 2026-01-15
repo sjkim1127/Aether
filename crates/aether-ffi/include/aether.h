@@ -21,6 +21,18 @@ typedef struct AetherProvider AetherProvider;
  */
 typedef struct AetherTemplate AetherTemplate;
 
+/**
+ * Callback type for streaming chunks.
+ *
+ * # Arguments
+ * * `chunk` - The chunk of generated text (null-terminated C string)
+ * * `user_data` - User-provided context pointer
+ *
+ * # Returns
+ * Return true to continue streaming, false to abort.
+ */
+typedef bool (*AetherStreamCallback)(const char *chunk, void *user_data);
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -179,6 +191,36 @@ char *aether_generate(const struct AetherProvider *provider, const char *prompt)
  * Free a string allocated by Aether.
  */
 void aether_free_string(char *s);
+
+/**
+ * Render a template with streaming output.
+ *
+ * # Arguments
+ * * `engine` - Engine handle
+ * * `template` - Template handle
+ * * `slot_name` - Name of the slot to stream
+ * * `callback` - Function pointer called for each chunk
+ * * `user_data` - User context passed to callback (can be NULL)
+ *
+ * # Returns
+ * Newly allocated string with the full result. Caller must free with `aether_free_string()`.
+ * Returns NULL on error. Check `aether_last_error()`.
+ *
+ * # Example (C++)
+ * ```cpp
+ * bool on_chunk(const char* chunk, void* user_data) {
+ *     std::cout << chunk << std::flush;
+ *     return true;  // continue streaming
+ * }
+ *
+ * char* result = aether_render_stream(engine, tmpl, "code", on_chunk, nullptr);
+ * ```
+ */
+char *aether_render_stream(const struct AetherEngine *engine,
+                           const struct AetherTemplate *template_,
+                           const char *slot_name,
+                           AetherStreamCallback callback,
+                           void *user_data);
 
 /**
  * Get the Aether version string.

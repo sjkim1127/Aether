@@ -517,6 +517,102 @@ pub extern "C" fn aether_free_string(s: *mut c_char) {
 }
 
 // ============================================================
+// Streaming API
+// ============================================================
+
+/// Callback type for streaming chunks.
+/// 
+/// # Arguments
+/// * `chunk` - The chunk of generated text (null-terminated C string)
+/// * `user_data` - User-provided context pointer
+/// 
+/// # Returns
+/// Return true to continue streaming, false to abort.
+pub type AetherStreamCallback = extern "C" fn(chunk: *const c_char, user_data: *mut libc::c_void) -> bool;
+
+/// Render a template with streaming output.
+///
+/// # Arguments
+/// * `engine` - Engine handle
+/// * `template` - Template handle
+/// * `slot_name` - Name of the slot to stream
+/// * `callback` - Function pointer called for each chunk
+/// * `user_data` - User context passed to callback (can be NULL)
+///
+/// # Returns
+/// Newly allocated string with the full result. Caller must free with `aether_free_string()`.
+/// Returns NULL on error. Check `aether_last_error()`.
+///
+/// # Example (C++)
+/// ```cpp
+/// bool on_chunk(const char* chunk, void* user_data) {
+///     std::cout << chunk << std::flush;
+///     return true;  // continue streaming
+/// }
+///
+/// char* result = aether_render_stream(engine, tmpl, "code", on_chunk, nullptr);
+/// ```
+#[no_mangle]
+pub extern "C" fn aether_render_stream(
+    engine: *const AetherEngine,
+    template: *const AetherTemplate,
+    slot_name: *const c_char,
+    callback: AetherStreamCallback,
+    user_data: *mut libc::c_void,
+) -> *mut c_char {
+    use futures::StreamExt;
+
+    if engine.is_null() || template.is_null() || slot_name.is_null() {
+        set_last_error("Engine, template, or slot_name is null".to_string());
+        return ptr::null_mut();
+    }
+
+    let engine_ref = unsafe { &*engine };
+    let template_ref = unsafe { &*template };
+    let slot_name_str = unsafe { CStr::from_ptr(slot_name) }.to_string_lossy();
+
+    match engine_ref.inner.generate_slot_stream(&template_ref.inner, &slot_name_str) {
+        Ok(mut stream) => {
+            let mut full_result = String::new();
+
+            RUNTIME.block_on(async {
+                while let Some(result) = stream.next().await {
+                    match result {
+                        Ok(chunk) => {
+                            full_result.push_str(&chunk.delta);
+
+                            // Call the C callback with the chunk
+                            if let Ok(cstr) = CString::new(chunk.delta.clone()) {
+                                let should_continue = callback(cstr.as_ptr(), user_data);
+                                if !should_continue {
+                                    break;  // User requested abort
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            set_last_error(e.to_string());
+                            return;
+                        }
+                    }
+                }
+            });
+
+            match CString::new(full_result) {
+                Ok(cstr) => cstr.into_raw(),
+                Err(e) => {
+                    set_last_error(format!("Invalid result: {}", e));
+                    ptr::null_mut()
+                }
+            }
+        }
+        Err(e) => {
+            set_last_error(e.to_string());
+            ptr::null_mut()
+        }
+    }
+}
+
+// ============================================================
 // Version Info
 // ============================================================
 

@@ -120,6 +120,7 @@ dependencies = [
  "aether-ai",
  "aether-core",
  "cbindgen",
+ "futures",
  "libc",
  "once_cell",
  "tokio",

@@ -17,6 +17,7 @@ aether-ai = { workspace = true }
 tokio = { workspace = true }
 once_cell = "1.19"
 libc = "0.2"
+futures = "0.3"
 
 [build-dependencies]
 cbindgen = "0.26"
