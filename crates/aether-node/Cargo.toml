@@ -1,6 +1,6 @@
 [package]
 name = "aether-node"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 license = "MIT"
 description = "Node.js bindings for Aether AI code injection framework"
@@ -9,8 +9,8 @@ description = "Node.js bindings for Aether AI code injection framework"
 crate-type = ["cdylib"]
 
 [dependencies]
-aether-core = { path = "../aether-core" }
-aether-ai = { path = "../aether-ai" }
+aether-core = { workspace = true }
+aether-ai = { workspace = true }
 napi = { version = "2", default-features = false, features = ["async", "napi6", "tokio_rt"] }
 napi-derive = "2"
 tokio = { version = "1.43", features = ["full"] }

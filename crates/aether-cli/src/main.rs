@@ -1,5 +1,5 @@
-use aether_ai::{OpenAiProvider, AnthropicProvider, OllamaProvider, GeminiProvider};
 use aether_core::{InjectionEngine, Template, ProviderConfig};
+use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use dotenvy::dotenv;
@@ -56,6 +56,14 @@ enum Commands {
         /// Use TOON format for context optimization
         #[arg(long)]
         toon: bool,
+
+        /// Enable Aether Inspector UI
+        #[arg(long)]
+        inspect: bool,
+
+        /// Port for Aether Inspector UI (default: 3000)
+        #[arg(long, default_value_t = 3000)]
+        inspect_port: u16,
     },
     
     /// Initialize a new Aether configuration (Coming Soon)
@@ -86,7 +94,11 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Generate { template, output, provider, model, set, stream, heal, cache, toon, temp } => {
+        Commands::Generate { 
+            template, output, provider, model, set, 
+            stream, heal, cache, toon, temp, 
+            inspect, inspect_port 
+        } => {
             info!("Reading template from {:?}", template);
             
             // 1. Load Template
@@ -112,65 +124,65 @@ async fn main() -> Result<()> {
                 }
             }
 
-            // 3. Initialize Provider & Run
-            info!("Initializing AI provider: {:?}", provider);
-            
-            match provider {
+            let provider_obj: Arc<dyn aether_core::AiProvider + Send + Sync> = match provider {
                 ProviderType::Openai => {
-                    let p = if let Some(m) = model {
-                        aether_ai::openai(m)?
-                    } else {
-                        aether_ai::OpenAiProvider::from_env()?
-                    };
-                    let mut engine = InjectionEngine::new(p);
-                    if *heal { engine = engine.with_validator(RustValidator); }
-                    if *toon { engine = engine.with_toon(true); }
-                    if *cache { engine = engine.with_cache(SemanticCache::new()?); }
-                    run_generation(engine, tmpl, output, *stream).await?;
+                    if let Some(m) = model { Arc::new(aether_ai::openai(m)?) } 
+                    else { Arc::new(aether_ai::OpenAiProvider::from_env()?) }
                 }
                 ProviderType::Anthropic => {
-                    let p = if let Some(m) = model {
-                        aether_ai::anthropic(m)?
-                    } else {
-                        aether_ai::AnthropicProvider::from_env()?
-                    };
-                    let mut engine = InjectionEngine::new(p);
-                    if *heal { engine = engine.with_validator(RustValidator); }
-                    if *toon { engine = engine.with_toon(true); }
-                    if *cache { engine = engine.with_cache(SemanticCache::new()?); }
-                    run_generation(engine, tmpl, output, *stream).await?;
+                    if let Some(m) = model { Arc::new(aether_ai::anthropic(m)?) } 
+                    else { Arc::new(aether_ai::AnthropicProvider::from_env()?) }
                 }
                 ProviderType::Gemini => {
-                    let p = if let Some(m) = model {
-                        aether_ai::gemini(m)?
-                    } else {
-                        aether_ai::GeminiProvider::from_env()?
-                    };
-                    let mut engine = InjectionEngine::new(p);
-                    if *heal { engine = engine.with_validator(RustValidator); }
-                    if *toon { engine = engine.with_toon(true); }
-                    if *cache { engine = engine.with_cache(SemanticCache::new()?); }
-                    run_generation(engine, tmpl, output, *stream).await?;
+                    if let Some(m) = model { Arc::new(aether_ai::gemini(m)?) } 
+                    else { Arc::new(aether_ai::GeminiProvider::from_env()?) }
                 }
                 ProviderType::Ollama => {
-                    let model_name = model.as_deref().unwrap_or("codellama");
-                    let p = aether_ai::ollama(model_name);
-                    let mut engine = InjectionEngine::new(p);
-                    if *heal { engine = engine.with_validator(RustValidator); }
-                    if *toon { engine = engine.with_toon(true); }
-                    if *cache { engine = engine.with_cache(SemanticCache::new()?); }
-                    run_generation(engine, tmpl, output, *stream).await?;
+                    let m = model.as_deref().unwrap_or("codellama");
+                    Arc::new(aether_ai::ollama(m))
                 }
                 ProviderType::Grok => {
-                    let model_name = model.as_deref().unwrap_or("grok-1");
-                    let p = aether_ai::grok(model_name)?;
-                    let mut engine = InjectionEngine::new(p);
-                    if *heal { engine = engine.with_validator(RustValidator); }
-                    if *toon { engine = engine.with_toon(true); }
-                    if *cache { engine = engine.with_cache(SemanticCache::new()?); }
-                    run_generation(engine, tmpl, output, *stream).await?;
+                    let m = model.as_deref().unwrap_or("grok-1");
+                    Arc::new(aether_ai::grok(m)?)
                 }
+            };
+
+            use aether_core::AetherConfig;
+            let mut config = AetherConfig::from_env()
+                .with_healing(*heal)
+                .with_toon(*toon)
+                .with_inspector(*inspect)
+                .with_inspector_port(*inspect_port);
+            
+            if *cache {
+                config = config.with_cache(true);
             }
+
+            let mut engine = InjectionEngine::with_config(provider_obj, config);
+            
+            // Setup Inspector if enabled
+            if *inspect {
+                let inspector = aether_inspector::Inspector::new();
+                let server_inspector = std::sync::Arc::new(inspector.clone());
+                let port = *inspect_port;
+
+                tokio::spawn(async move {
+                    let server = aether_inspector::InspectorServer::new(server_inspector);
+                    if let Err(e) = server.start(port).await {
+                        error!("Inspector server error: {}", e);
+                    }
+                });
+                
+                engine = engine.with_observer(inspector);
+                info!("🚀 Aether Inspector UI active at http://localhost:{}", port);
+            }
+
+            if *heal {
+                engine = engine.with_validator(aether_core::validation::MultiValidator::new());
+            }
+
+            run_generation(engine, tmpl, output, *stream).await?;
+        }
         }
         Commands::Init => {
             println!("Initializing Aether project... (Not implemented yet)");

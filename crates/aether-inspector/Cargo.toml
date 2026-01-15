@@ -1,0 +1,25 @@
+[package]
+name = "aether-inspector"
+version = "0.1.0"
+edition = "2021"
+authors = ["Aether Team"]
+license = "MIT"
+description = "Real-time visualization and debugging dashboard for Aether Codegen"
+
+[dependencies]
+aether-core = { workspace = true }
+tokio = { workspace = true }
+axum = "0.7"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+dashmap = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = { workspace = true }
+rust-embed = "8.3"
+mime_guess = "2.0"
+
+[dev-dependencies]
+aether-ai = { workspace = true }
+dotenv = "0.15"
+tracing-subscriber = { workspace = true }

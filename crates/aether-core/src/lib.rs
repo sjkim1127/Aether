@@ -33,23 +33,30 @@ pub mod validation;
 pub mod cache;
 pub mod toon;
 pub mod runtime;
+pub mod observer;
+pub mod shield;
 pub mod config;
+pub mod script;
 
 pub use error::{AetherError, Result};
 pub use template::Template;
-pub use slot::{Slot, SlotKind};
+pub use slot::{Slot, SlotKind, SlotConstraints};
 pub use provider::{AiProvider, ProviderConfig};
 pub use context::InjectionContext;
-pub use engine::InjectionEngine;
+pub use engine::{InjectionEngine, RenderSession};
+pub use script::{AetherScript, AetherAgenticRuntime};
 pub use runtime::AetherRuntime;
 pub use config::AetherConfig;
+pub use cache::{Cache, ExactCache, SemanticCache, TieredCache};
+pub use observer::{EngineObserver, ObserverPtr};
 
 /// Re-export commonly used types
 pub mod prelude {
     pub use crate::{
-        Template, Slot, SlotKind,
+        Template, Slot, SlotKind, SlotConstraints,
         AiProvider, ProviderConfig,
-        InjectionContext, InjectionEngine,
+        InjectionContext, InjectionEngine, RenderSession,
+        AetherScript, AetherAgenticRuntime,
         AetherError, Result,
     };
 }

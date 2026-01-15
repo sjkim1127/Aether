@@ -269,7 +269,6 @@ impl AiProvider for MockProvider {
             .cloned()
             .unwrap_or_else(|| format!("// Generated code for: {}", request.slot.name));
 
-        use futures::StreamExt;
         let words: Vec<String> = code.split_whitespace().map(|s| format!("{} ", s)).collect();
         
         let stream = async_stream::stream! {

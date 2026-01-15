@@ -20,6 +20,14 @@ pub enum AetherError {
     #[error("AI provider error: {0}")]
     ProviderError(String),
 
+    /// Validation failed during self-healing.
+    #[error("Validation failed for slot '{slot}': {error}")]
+    ValidationFailed { slot: String, error: String },
+
+    /// Maximum retries exceeded during self-healing.
+    #[error("Maximum retries ({retries}) exceeded for slot '{slot}'. Last error: {last_error}")]
+    MaxRetriesExceeded { slot: String, retries: u32, last_error: String },
+
     /// Network request failed.
     #[error("Network error: {0}")]
     NetworkError(String),
@@ -43,6 +51,10 @@ pub enum AetherError {
     /// JSON serialization/deserialization failed.
     #[error("JSON error: {0}")]
     JsonError(#[from] serde_json::Error),
+
+    /// Error during context serialization (e.g., for TOON)
+    #[error("Context serialization failed: {0}")]
+    ContextSerializationError(String),
 
     /// Timeout occurred.
     #[error("Operation timed out after {0} seconds")]

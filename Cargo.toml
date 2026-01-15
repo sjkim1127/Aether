@@ -7,10 +7,11 @@ members = [
     "crates/aether-node",
     "crates/aether-cli",
     "crates/aether-python",
+    "crates/aether-inspector",
 ]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["Aether Team"]
 license = "MIT"
@@ -19,9 +20,10 @@ description = "AI-powered dynamic code injection framework with Anti-Reversing S
 
 [workspace.dependencies]
 # Internal crates
-aether-core = { path = "crates/aether-core", version = "0.1.2" }
-aether-ai = { path = "crates/aether-ai", version = "0.1.2" }
-aether-macros = { path = "crates/aether-macros", version = "0.1.2" }
+aether-core = { path = "crates/aether-core", version = "0.1.3" }
+aether-ai = { path = "crates/aether-ai", version = "0.1.3" }
+aether-macros = { path = "crates/aether-macros", version = "0.1.3" }
+aether-inspector = { path = "crates/aether-inspector", version = "0.1.0" }
 
 # Core dependencies (Updated 2026-01)
 tokio = { version = "1.49", features = ["full"] }
@@ -51,3 +53,10 @@ rhai = "1.23"
 
 # Caching
 dashmap = "6.1"
+
+# Utilities
+uuid = { version = "1.11", features = ["v4", "serde"] }
+base64 = "0.22"
+
+# Crypto (Aether Shield)
+aes-gcm = "0.10"

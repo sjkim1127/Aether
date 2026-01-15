@@ -5,6 +5,7 @@
 
 use crate::{AetherError, Result, Slot, SlotKind};
 use regex::Regex;
+use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -12,6 +13,12 @@ use std::path::Path;
 /// Pattern for matching AI slots in templates.
 /// Format: {{AI:slot_name}} or {{AI:slot_name:kind}}
 const SLOT_PATTERN: &str = r"\{\{AI:([a-zA-Z_][a-zA-Z0-9_]*)(?::([a-zA-Z]+))?\}\}";
+
+static SLOT_REGEX: OnceLock<Regex> = OnceLock::new();
+
+fn get_slot_regex() -> &'static Regex {
+    SLOT_REGEX.get_or_init(|| Regex::new(SLOT_PATTERN).expect("Invalid slot pattern regex"))
+}
 
 /// Represents a template with AI injection slots.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -142,7 +149,7 @@ impl Template {
 
     /// Parse slots from template content.
     fn parse_slots(content: &str) -> HashMap<String, Slot> {
-        let re = Regex::new(SLOT_PATTERN).expect("Invalid slot pattern regex");
+        let re = get_slot_regex();
         let mut slots = HashMap::new();
 
         for cap in re.captures_iter(content) {
@@ -173,9 +180,9 @@ impl Template {
         }
     }
 
-    /// Find all slot locations in the template.
-    pub fn find_locations(&self) -> Vec<SlotLocation> {
-        let re = Regex::new(SLOT_PATTERN).expect("Invalid slot pattern regex");
+    /// Find all slot locations in the template content.
+    fn find_locations(&self) -> Vec<SlotLocation> {
+        let re = get_slot_regex();
         let mut locations = Vec::new();
 
         for cap in re.captures_iter(&self.content) {

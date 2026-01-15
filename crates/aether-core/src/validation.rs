@@ -16,6 +16,11 @@ pub enum ValidationResult {
 pub trait Validator: Send + Sync {
     /// Check if the code is valid according to the validator's rules.
     fn validate(&self, kind: &SlotKind, code: &str) -> Result<ValidationResult>;
+
+    /// Optional: Validate using the full slot context (for TDD).
+    fn validate_with_slot(&self, _slot: &crate::Slot, code: &str) -> Result<ValidationResult> {
+        self.validate(&_slot.kind, code)
+    }
     
     /// Format the code to comply with style guides.
     fn format(&self, kind: &SlotKind, code: &str) -> Result<String>;
@@ -281,6 +286,107 @@ impl Validator for PythonValidator {
 }
 
 // ============================================================
+// TddValidator - Runs tests against generated code
+// ============================================================
+
+/// A validator that runs functional tests against code using a harness.
+pub struct TddValidator;
+
+impl TddValidator {
+    fn detect_suffix(kind: &SlotKind, code: &str) -> &'static str {
+        match kind {
+            SlotKind::JavaScript => ".js",
+            SlotKind::Html => ".html",
+            SlotKind::Css => ".css",
+            _ => {
+                if code.contains("def ") || code.contains("import ") && code.contains(":") {
+                    ".py"
+                } else {
+                    ".rs"
+                }
+            }
+        }
+    }
+}
+
+impl Validator for TddValidator {
+    fn validate(&self, _kind: &SlotKind, _code: &str) -> Result<ValidationResult> {
+        // This validator requires constraints to be present for meaningful work
+        // (Handled by MultiValidator delegating to this)
+        Ok(ValidationResult::Valid)
+    }
+
+    fn validate_with_slot(&self, slot: &crate::Slot, code: &str) -> Result<ValidationResult> {
+        let constraints = match &slot.constraints {
+            Some(c) => c,
+            None => return Ok(ValidationResult::Valid),
+        };
+
+        let harness = match &constraints.test_harness {
+            Some(h) => h,
+            None => return Ok(ValidationResult::Valid),
+        };
+
+        let test_code = harness.replace("{{CODE}}", code);
+        let suffix = Self::detect_suffix(&slot.kind, code);
+
+        // For Rust, use a temporary directory if possible to handle multiple files or complex builds
+        // For now, single file is fine.
+        let mut tmp_file = NamedTempFile::with_suffix(suffix)
+            .map_err(|e| crate::AetherError::InjectionError(e.to_string()))?;
+        
+        tmp_file.write_all(test_code.as_bytes())
+            .map_err(|e| crate::AetherError::InjectionError(e.to_string()))?;
+
+        // Determine test command
+        let mut command_str = constraints.test_command.clone().unwrap_or_else(|| {
+            match suffix {
+                ".rs" => format!("rustc --test -o {}.exe {} && {}.exe", tmp_file.path().display(), tmp_file.path().display(), tmp_file.path().display()),
+                ".js" => format!("node {}", tmp_file.path().display()),
+                ".py" => format!("python {}", tmp_file.path().display()),
+                _ => "echo 'No test command'".to_string(),
+            }
+        });
+
+        // Replace {{FILE}} placeholder in custom commands
+        command_str = command_str.replace("{{FILE}}", &tmp_file.path().display().to_string());
+
+        // Run command (Shell execution for complex commands)
+        #[cfg(windows)]
+        let shell = "powershell";
+        #[cfg(not(windows))]
+        let shell = "sh";
+
+        #[cfg(windows)]
+        let arg = "-Command";
+        #[cfg(not(windows))]
+        let arg = "-c";
+
+        let output = Command::new(shell)
+            .arg(arg)
+            .arg(&command_str)
+            .output()
+            .map_err(|e| crate::AetherError::InjectionError(e.to_string()))?;
+
+        if !output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            
+            return Ok(ValidationResult::Invalid(format!(
+                "TDD Test Failure:\nSTDOUT:\n{}\nSTDERR:\n{}",
+                stdout, stderr
+            )));
+        }
+
+        Ok(ValidationResult::Valid)
+    }
+
+    fn format(&self, _kind: &SlotKind, code: &str) -> Result<String> {
+        Ok(code.to_string())
+    }
+}
+
+// ============================================================
 // MultiValidator - Auto-selects based on SlotKind
 // ============================================================
 
@@ -289,6 +395,7 @@ pub struct MultiValidator {
     rust: RustValidator,
     js: JsValidator,
     python: PythonValidator,
+    tdd: TddValidator,
 }
 
 impl Default for MultiValidator {
@@ -303,28 +410,48 @@ impl MultiValidator {
             rust: RustValidator,
             js: JsValidator,
             python: PythonValidator,
+            tdd: TddValidator,
         }
     }
 }
 
 impl Validator for MultiValidator {
     fn validate(&self, kind: &SlotKind, code: &str) -> Result<ValidationResult> {
-        match kind {
-            SlotKind::JavaScript => self.js.validate(kind, code),
-            SlotKind::Html | SlotKind::Css => Ok(ValidationResult::Valid), // TODO: Add HTML/CSS validators
-            SlotKind::Raw => Ok(ValidationResult::Valid),
-            // Default to Rust for function/class/component (legacy behavior)
+        // MultiValidator generally delegates to validate_with_slot if possible
+        self.validate_with_slot(&crate::Slot::new("unknown", "").with_kind(kind.clone()), code)
+    }
+
+    fn validate_with_slot(&self, slot: &crate::Slot, code: &str) -> Result<ValidationResult> {
+        let kind = &slot.kind;
+        
+        // 1. Run language-specific validation first
+        let base_result = match kind {
+            SlotKind::JavaScript => self.js.validate(kind, code)?,
+            SlotKind::Html | SlotKind::Css => ValidationResult::Valid,
+            SlotKind::Raw => ValidationResult::Valid,
             _ => {
-                // Heuristic: detect language from code patterns
                 if code.contains("def ") || code.contains("import ") && code.contains(":") {
-                    self.python.validate(kind, code)
+                    self.python.validate(kind, code)?
                 } else if code.contains("function ") || code.contains("const ") || code.contains("=>") {
-                    self.js.validate(kind, code)
+                    self.js.validate(kind, code)?
                 } else {
-                    self.rust.validate(kind, code)
+                    self.rust.validate(kind, code)?
                 }
             }
+        };
+
+        if let ValidationResult::Invalid(e) = base_result {
+            return Ok(ValidationResult::Invalid(e));
         }
+
+        // 2. Run TDD validation if harness is present
+        if let Some(ref constraints) = slot.constraints {
+            if constraints.test_harness.is_some() {
+                return self.tdd.validate_with_slot(slot, code);
+            }
+        }
+
+        Ok(ValidationResult::Valid)
     }
 
     fn format(&self, kind: &SlotKind, code: &str) -> Result<String> {

@@ -71,7 +71,7 @@ pub fn anthropic(model: &str) -> Result<AnthropicProvider> {
 /// ```
 pub fn gemini(model: &str) -> Result<GeminiProvider> {
     match GeminiProvider::from_env() {
-        Ok(mut p) => {
+        Ok(_) => {
              let api_key = std::env::var("GOOGLE_API_KEY")
                 .map_err(|_| AetherError::ConfigError("GOOGLE_API_KEY not set".to_string()))?;
              let config = ProviderConfig::new(api_key, model);

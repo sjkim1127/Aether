@@ -42,4 +42,5 @@ build_error*.txt
 /demo-react/
 
 # Deployment Scripts
-scripts/
+scripts/.env
+# scripts/publish_all.ps1 is tracked

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether Inspector | Intelligence Visualizer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --surface: #141418;
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.3);
+            --text: #f8fafc;
+            --text-dim: #94a3b8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --border: rgba(255, 255, 255, 0.08);
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Outfit', sans-serif;
+            overflow: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            height: 100vh;
+        }
+
+        /* Sidebar: Event List */
+        .sidebar {
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        .header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        .event-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .event-card {
+            padding: 16px;
+            margin-bottom: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .event-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--primary-glow);
+            transform: translateY(-1px);
+        }
+
+        .event-card.active {
+            background: rgba(99, 102, 241, 0.1);
+            border-color: var(--primary);
+        }
+
+        .card-top {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-success { background: rgba(16, 185, 129, 0.1); color: var(--success); }
+        .status-generating { background: rgba(99, 102, 241, 0.1); color: var(--primary); }
+        .status-failed { background: rgba(239, 68, 68, 0.1); color: var(--error); }
+
+        .card-title { font-weight: 500; font-size: 0.95rem; }
+        .card-time { font-size: 0.8rem; color: var(--text-dim); }
+
+        /* Main View: Details */
+        .main-view {
+            display: flex;
+            flex-direction: column;
+            background: radial-gradient(circle at top left, #111115 0%, #0a0a0c 100%);
+            padding: 32px;
+            overflow-y: auto;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-dim);
+        }
+
+        .detail-pane {
+            display: none;
+            max-width: 1000px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .section {
+            margin-bottom: 32px;
+            background: var(--surface);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        .section-header {
+            padding: 16px 24px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-header h3 {
+            margin: 0;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+        }
+
+        .code-block {
+            padding: 24px;
+            margin: 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            color: #d1d5db;
+            background: #0d0d0f;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 24px;
+            padding: 24px;
+        }
+
+        .meta-item label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+
+        .meta-item span {
+            font-weight: 500;
+            font-size: 1.1rem;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-fade {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="header">
+                <div class="logo">Aether Inspector</div>
+            </div>
+            <div class="event-list" id="eventList">
+                <!-- Events populated here -->
+            </div>
+        </aside>
+        
+        <main class="main-view">
+            <div id="emptyState" class="empty-state">
+                <p>Select a generation event to inspect</p>
+            </div>
+
+            <div id="detailPane" class="detail-pane">
+                <div class="section">
+                    <div class="section-header">
+                        <h3>Intelligence Metrics</h3>
+                    </div>
+                    <div class="meta-grid">
+                        <div class="meta-item">
+                            <label>Status</label>
+                            <span id="detailStatus">-</span>
+                        </div>
+                        <div class="meta-item">
+                            <label>Tokens Used</label>
+                            <span id="detailTokens">-</span>
+                        </div>
+                        <div class="meta-item">
+                            <label>Healing Attempts</label>
+                            <span id="detailHealing">-</span>
+                        </div>
+                        <div class="meta-item">
+                            <label>Template</label>
+                            <span id="detailTemplate">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <h3>Calculated Prompt</h3>
+                    </div>
+                    <pre class="code-block" id="detailPrompt"></pre>
+                </div>
+
+                <div id="toonSection" class="section" style="display: none;">
+                    <div class="section-header">
+                        <h3>TOON Compressed Payload</h3>
+                    </div>
+                    <pre class="code-block" id="detailToon"></pre>
+                </div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <h3>Generated Output</h3>
+                        <button onclick="copyCode()" style="background: none; border: 1px solid var(--border); color: var(--text-dim); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">Copy</button>
+                    </div>
+                    <pre class="code-block" id="detailResult" style="color: var(--success);"></pre>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let currentEvents = [];
+        let activeId = null;
+
+        async function fetchEvents() {
+            try {
+                const res = await fetch('/api/events');
+                const data = await res.json();
+                
+                if (JSON.stringify(data) !== JSON.stringify(currentEvents)) {
+                    currentEvents = data;
+                    renderList();
+                }
+            } catch (err) {
+                console.error("Failed to fetch events", err);
+            }
+        }
+
+        function renderList() {
+            const list = document.getElementById('eventList');
+            list.innerHTML = currentEvents.map(ev => `
+                <div class="event-card ${ev.id === activeId ? 'active' : ''}" onclick="showDetail('${ev.id}')">
+                    <div class="card-top">
+                        <span class="card-time">${new Date(ev.timestamp).toLocaleTimeString()}</span>
+                        <span class="status-badge status-${ev.status.toLowerCase()}">${ev.status}</span>
+                    </div>
+                    <div class="card-title">${ev.slot}</div>
+                </div>
+            `).join('');
+        }
+
+        function showDetail(id) {
+            activeId = id;
+            renderList();
+            
+            const ev = currentEvents.find(e => e.id === id);
+            if (!ev) return;
+
+            document.getElementById('emptyState').style.display = 'none';
+            const pane = document.getElementById('detailPane');
+            pane.style.display = 'block';
+            pane.classList.remove('animate-fade');
+            void pane.offsetWidth; // Reset animation
+            pane.classList.add('animate-fade');
+
+            document.getElementById('detailStatus').textContent = ev.status;
+            document.getElementById('detailStatus').style.color = 
+                ev.status === 'Success' ? 'var(--success)' : (ev.status === 'Failed' ? 'var(--error)' : 'var(--primary)');
+            
+            document.getElementById('detailTokens').textContent = ev.tokens_used || 'N/A';
+            document.getElementById('detailHealing').textContent = ev.healing_attempts || '0';
+            document.getElementById('detailTemplate').textContent = ev.template;
+            document.getElementById('detailPrompt').textContent = ev.prompt;
+            document.getElementById('detailResult').textContent = ev.result || 'Pending...';
+
+            const toon = document.getElementById('toonSection');
+            if (ev.toon_payload) {
+                toon.style.display = 'block';
+                document.getElementById('detailToon').textContent = ev.toon_payload;
+            } else {
+                toon.style.display = 'none';
+            }
+        }
+
+        function copyCode() {
+            const code = document.getElementById('detailResult').textContent;
+            navigator.clipboard.writeText(code);
+        }
+
+        // Poll for updates
+        setInterval(fetchEvents, 2000);
+        fetchEvents();
+    </script>
+</body>
+</html>

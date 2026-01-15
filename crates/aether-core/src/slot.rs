@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Represents a slot in a template where code can be injected.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Slot {
     /// Unique identifier for this slot.
     pub name: String,
@@ -30,7 +30,7 @@ pub struct Slot {
 }
 
 /// The kind of slot determines how code is generated.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum SlotKind {
     /// Raw code injection (no wrapper).
@@ -60,7 +60,7 @@ pub enum SlotKind {
 }
 
 /// Constraints on generated code.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct SlotConstraints {
     /// Maximum lines of code.
     pub max_lines: Option<usize>,
@@ -76,6 +76,29 @@ pub struct SlotConstraints {
 
     /// Language hint for code generation.
     pub language: Option<String>,
+
+    /// TDD Test harness. This is the code that will be used to test the generated output.
+    /// It should contain a placeholder like `{{CODE}}` where the generated code will be injected.
+    pub test_harness: Option<String>,
+
+    /// Command to execute the test harness (e.g., "cargo test", "node test.js").
+    pub test_command: Option<String>,
+}
+
+impl Eq for Slot {}
+
+impl std::hash::Hash for Slot {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.prompt.hash(state);
+        self.kind.hash(state);
+        self.constraints.hash(state);
+        self.required.hash(state);
+        self.default.hash(state);
+        if let Some(temp) = self.temperature {
+            temp.to_bits().hash(state);
+        }
+    }
 }
 
 impl Slot {
@@ -202,6 +225,18 @@ impl SlotConstraints {
     /// Add a forbidden pattern.
     pub fn forbid_pattern(mut self, pattern: impl Into<String>) -> Self {
         self.forbidden_patterns.push(pattern.into());
+        self
+    }
+
+    /// Set a TDD test harness.
+    pub fn test_harness(mut self, harness: impl Into<String>) -> Self {
+        self.test_harness = Some(harness.into());
+        self
+    }
+
+    /// Set a TDD test command.
+    pub fn test_command(mut self, command: impl Into<String>) -> Self {
+        self.test_command = Some(command.into());
         self
     }
 }

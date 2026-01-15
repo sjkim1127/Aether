@@ -4,12 +4,13 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 /// Context for AI code injection.
 ///
 /// This provides additional information to the AI model to help generate
 /// more relevant and accurate code.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InjectionContext {
     /// Project name or identifier.
     pub project: Option<String>,
@@ -19,6 +20,9 @@ pub struct InjectionContext {
 
     /// Framework being used (e.g., "react", "vue", "actix-web").
     pub framework: Option<String>,
+
+    /// Architectural context (e.g., "Clean Architecture", "Microservices", "Tailwind CSS").
+    pub architecture: Option<String>,
 
     /// Coding style preferences.
     pub style: Option<StyleGuide>,
@@ -37,7 +41,7 @@ pub struct InjectionContext {
 }
 
 /// Coding style preferences.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct StyleGuide {
     /// Indentation style (spaces or tabs).
     pub indent: IndentStyle,
@@ -56,7 +60,7 @@ pub struct StyleGuide {
 }
 
 /// Indentation style.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum IndentStyle {
     /// Use spaces with specified count.
     Spaces(u8),
@@ -65,7 +69,7 @@ pub enum IndentStyle {
 }
 
 /// Quote style for strings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum QuoteStyle {
     Single,
@@ -73,13 +77,39 @@ pub enum QuoteStyle {
 }
 
 /// Naming convention.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum NamingConvention {
     CamelCase,
     PascalCase,
     SnakeCase,
     KebabCase,
+}
+
+impl Hash for InjectionContext {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.project.hash(state);
+        self.language.hash(state);
+        self.framework.hash(state);
+        self.architecture.hash(state);
+        self.style.hash(state);
+        self.surrounding_code.hash(state);
+        self.available_imports.hash(state);
+        
+        let mut vars: Vec<_> = self.variables.iter().collect();
+        vars.sort_by_key(|(k, _)| *k);
+        for (k, v) in vars {
+            k.hash(state);
+            v.hash(state);
+        }
+
+        let mut extra_sorted: Vec<_> = self.extra.iter().collect();
+        extra_sorted.sort_by_key(|(k, _)| *k);
+        for (k, v) in extra_sorted {
+            k.hash(state);
+            serde_json::to_string(v).unwrap_or_default().hash(state);
+        }
+    }
 }
 
 impl InjectionContext {
@@ -103,6 +133,12 @@ impl InjectionContext {
     /// Set the framework.
     pub fn with_framework(mut self, framework: impl Into<String>) -> Self {
         self.framework = Some(framework.into());
+        self
+    }
+
+    /// Set the architectural context.
+    pub fn with_architecture(mut self, architecture: impl Into<String>) -> Self {
+        self.architecture = Some(architecture.into());
         self
     }
 
@@ -144,6 +180,10 @@ impl InjectionContext {
 
         if let Some(ref fw) = self.framework {
             parts.push(format!("Framework: {}", fw));
+        }
+
+        if let Some(ref arch) = self.architecture {
+            parts.push(format!("Architecture: {}", arch));
         }
 
         if let Some(ref style) = self.style {

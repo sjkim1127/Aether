@@ -1,6 +1,6 @@
 [package]
 name = "aether-python"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "Python bindings for Aether AI code injection framework"
 license = "MIT"
@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.20", features = ["extension-module", "abi3-py37"] }
-aether-core = { path = "../aether-core", version = "0.1.2" }
-aether-ai = { path = "../aether-ai", version = "0.1.2" }
+aether-core = { path = "../aether-core", version = "0.1.3" }
+aether-ai = { path = "../aether-ai", version = "0.1.3" }
 tokio = { version = "1", features = ["full"] }
 rhai = "1.23"

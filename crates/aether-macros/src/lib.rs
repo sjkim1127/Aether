@@ -8,6 +8,11 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, LitStr};
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
+use base64::{engine::general_purpose, Engine as _};
 
 /// Generate a template slot marker.
 ///
@@ -143,10 +148,22 @@ pub fn aether_secure(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Simplified attribute parsing (in production use syn::AttributeArgs)
     let attr_str = attr.to_string();
-    let prompt = if let Some(p) = attr_str.split("prompt =").nth(1).and_then(|s| s.split('"').nth(1)) {
-        p.to_string()
+    let (prompt, is_encrypted) = if let Some(p) = attr_str.split("prompt =").nth(1).and_then(|s| s.split('"').nth(1)) {
+        let p_str = p.to_string();
+        
+        // Compile-time Encryption Logic
+        if let Ok(key_str) = std::env::var("AETHER_SHIELD_KEY") {
+            let key = derive_key(&key_str);
+            let cipher = Aes256Gcm::new(&key.into());
+            let nonce = Nonce::from_slice(b"aether_nonce");
+            let ciphertext = cipher.encrypt(nonce, p_str.as_bytes()).expect("Shield encryption failed");
+            let encrypted = general_purpose::STANDARD.encode(ciphertext);
+            (encrypted, true)
+        } else {
+            (p_str, false)
+        }
     } else {
-        "Generate logic for this function".to_string()
+        ("Generate logic for this function".to_string(), false)
     };
 
     let arg_names: Vec<_> = fn_args.iter().filter_map(|arg| {
@@ -169,10 +186,17 @@ pub fn aether_secure(attr: TokenStream, item: TokenStream) -> TokenStream {
             
             let provider_type = std::env::var("AETHER_PROVIDER").unwrap_or_else(|_| "openai".to_string());
             
-            // Prepare template (common logic)
+            // Prepare template (decryption if needed)
+            let prompt_text = if #is_encrypted {
+                let key = std::env::var("AETHER_SHIELD_KEY").unwrap_or_else(|_| "default_key".to_string());
+                aether_core::shield::Shield::decrypt(#prompt, &key).expect("Aether Shield: Decryption failed. Possible tampered binary or incorrect key.")
+            } else {
+                #prompt.to_string()
+            };
+
             let script_prompt = format!(
                 "Implement this logic in Rhai script: {}. Output ONLY the raw Rhai script code. The inputs available are: {:?}. Return the result directly. Do not wrap in markdown.",
-                #prompt,
+                prompt_text,
                 vec![#(stringify!(#arg_names)),*]
             );
             
@@ -218,4 +242,17 @@ pub fn aether_secure(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     output.into()
+}
+
+fn derive_key(key_str: &str) -> [u8; 32] {
+    let mut key = [0u8; 32];
+    let bytes = key_str.as_bytes();
+    for i in 0..32 {
+        if i < bytes.len() {
+            key[i] = bytes[i];
+        } else {
+            key[i] = (i as u8).wrapping_mul(0xAF);
+        }
+    }
+    key
 }

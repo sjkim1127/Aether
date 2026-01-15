@@ -38,6 +38,14 @@ pub struct AetherConfig {
     /// Default: true, Env: AETHER_PARALLEL=false
     pub parallel: bool,
 
+    /// Whether to enable the Aether Inspector UI.
+    /// Default: false, Env: AETHER_INSPECT=true
+    pub inspector_enabled: bool,
+
+    /// Port for the Aether Inspector UI.
+    /// Default: 3000, Env: AETHER_INSPECT_PORT=8080
+    pub inspector_port: u16,
+
     /// Maximum retries for failed generations.
     /// Default: 2, Env: AETHER_MAX_RETRIES=3
     pub max_retries: u32,
@@ -60,6 +68,8 @@ impl Default for AetherConfig {
             healing_enabled: false,
             cache_enabled: false,
             parallel: true,
+            inspector_enabled: false,
+            inspector_port: 3000,
             max_retries: 2,
             auto_toon_threshold: Some(2000),
             cache_threshold: 0.90,
@@ -84,6 +94,14 @@ impl AetherConfig {
         }
         if let Ok(v) = env::var("AETHER_PARALLEL") {
             config.parallel = v.to_lowercase() != "false" && v != "0";
+        }
+        if let Ok(v) = env::var("AETHER_INSPECT") {
+            config.inspector_enabled = v.to_lowercase() == "true" || v == "1";
+        }
+        if let Ok(v) = env::var("AETHER_INSPECT_PORT") {
+            if let Ok(n) = v.parse() {
+                config.inspector_port = n;
+            }
         }
         if let Ok(v) = env::var("AETHER_MAX_RETRIES") {
             if let Ok(n) = v.parse() {
@@ -128,6 +146,18 @@ impl AetherConfig {
         self
     }
 
+    /// Builder: Enable or disable Aether Inspector.
+    pub fn with_inspector(mut self, enabled: bool) -> Self {
+        self.inspector_enabled = enabled;
+        self
+    }
+
+    /// Builder: Set Aether Inspector port.
+    pub fn with_inspector_port(mut self, port: u16) -> Self {
+        self.inspector_port = port;
+        self
+    }
+
     /// Builder: Set maximum retries.
     pub fn with_max_retries(mut self, retries: u32) -> Self {
         self.max_retries = retries;
@@ -149,6 +179,12 @@ impl AetherConfig {
             return context_length >= threshold;
         }
         false
+    }
+
+    /// Create a recommended default cache for the engine.
+    /// Returns a `TieredCache` (Hybrid Exact + Semantic).
+    pub fn default_cache(&self) -> crate::Result<crate::cache::TieredCache> {
+        crate::cache::TieredCache::new()
     }
 }
 

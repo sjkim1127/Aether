@@ -113,3 +113,37 @@ impl Cache for ExactCache {
         self.storage.insert(prompt.to_string(), response);
     }
 }
+
+/// A hybrid cache that balances speed (exact) and flexibility (semantic).
+pub struct TieredCache {
+    exact: ExactCache,
+    semantic: SemanticCache,
+}
+
+impl TieredCache {
+    /// Create a new tiered cache.
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            exact: ExactCache::new(),
+            semantic: SemanticCache::new()?,
+        })
+    }
+}
+
+impl Cache for TieredCache {
+    fn get(&self, prompt: &str) -> Option<String> {
+        // 1. Try exact match first (O(1), very fast)
+        if let Some(res) = self.exact.get(prompt) {
+            return Some(res);
+        }
+
+        // 2. Fallback to semantic similarity (O(N) + Embedding overhead)
+        self.semantic.get(prompt)
+    }
+
+    fn set(&self, prompt: &str, response: String) {
+        // Store in both for maximum hits
+        self.exact.set(prompt, response.clone());
+        self.semantic.set(prompt, response);
+    }
+}

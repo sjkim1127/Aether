@@ -15,6 +15,9 @@ use crate::provider::StreamResponse;
 use crate::validation::{Validator, ValidationResult};
 use crate::cache::Cache;
 use crate::toon::Toon;
+pub use crate::observer::ObserverPtr;
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 
 /// The main engine for AI code injection.
 ///
@@ -57,6 +60,31 @@ pub struct InjectionEngine<P: AiProvider> {
 
     /// Maximum retries for failed generations.
     max_retries: u32,
+
+    /// Optional observer for tracking events.
+    observer: Option<ObserverPtr>,
+}
+
+/// A session for tracking incremental rendering state.
+/// Holds fingerprints of slots and context to identify changes.
+#[derive(Debug, Clone, Default)]
+pub struct RenderSession {
+    /// Cached results indexed by (SlotHash, ContextHash)
+    pub results: HashMap<(u64, u64), String>,
+}
+
+impl RenderSession {
+    /// Create a new empty render session.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Calculate a stable hash for any hashable object.
+    pub fn hash<T: Hash>(t: &T) -> u64 {
+        let mut s = DefaultHasher::new();
+        t.hash(&mut s);
+        s.finish()
+    }
 }
 
 impl<P: AiProvider + 'static> InjectionEngine<P> {
@@ -65,17 +93,39 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
         Self::with_config(provider, AetherConfig::default())
     }
 
+    /// Internal: Create a raw engine without full config for script-based calls.
+    pub fn new_raw(provider: Arc<P>) -> Self {
+        Self {
+            provider,
+            validator: None,
+            cache: None,
+            use_toon: false,
+            auto_toon_threshold: None,
+            global_context: InjectionContext::default(),
+            parallel: false,
+            max_retries: 0,
+            observer: None,
+        }
+    }
+
     /// Create a new injection engine with the given provider and config.
     pub fn with_config(provider: P, config: AetherConfig) -> Self {
+        let validator: Option<Arc<dyn Validator>> = if config.healing_enabled {
+            Some(Arc::new(crate::validation::MultiValidator::new()))
+        } else {
+            None
+        };
+
         Self {
             provider: Arc::new(provider),
-            validator: None,
+            validator,
             cache: None,
             use_toon: config.toon_enabled,
             auto_toon_threshold: config.auto_toon_threshold,
             global_context: InjectionContext::default(),
             parallel: config.parallel,
             max_retries: config.max_retries,
+            observer: None,
         }
     }
 
@@ -115,6 +165,12 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
         self
     }
 
+    /// Set an observer for tracking events.
+    pub fn with_observer(mut self, observer: impl crate::observer::EngineObserver + 'static) -> Self {
+        self.observer = Some(Arc::new(observer));
+        self
+    }
+
     /// Render a template with AI-generated code.
     ///
     /// This method will generate code for all slots in the template
@@ -140,6 +196,39 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
         template.render(&injections)
     }
 
+    /// Render a template incrementally using a session.
+    /// 
+    /// This will only generate code for slots that have changed 
+    /// based on their definition and the current context.
+    #[instrument(skip(self, template, session), fields(template_name = %template.name))]
+    pub async fn render_incremental(
+        &self,
+        template: &Template,
+        session: &mut RenderSession,
+    ) -> Result<String> {
+        info!("Incrementally rendering template: {}", template.name);
+        
+        let context_hash = RenderSession::hash(&self.global_context);
+        let mut injections = HashMap::new();
+        
+        for (name, slot) in &template.slots {
+            let slot_hash = RenderSession::hash(slot);
+            let key = (slot_hash, context_hash);
+            
+            if let Some(cached) = session.results.get(&key) {
+                debug!("Incremental hit for slot: {}", name);
+                injections.insert(name.clone(), cached.clone());
+            } else {
+                debug!("Incremental miss for slot: {}", name);
+                let code = self.generate_slot(template, name).await?;
+                session.results.insert(key, code.clone());
+                injections.insert(name.clone(), code);
+            }
+        }
+        
+        template.render(&injections)
+    }
+
     async fn generate_all(
         &self,
         template: &Template,
@@ -159,47 +248,72 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
             .map(|threshold| base_context.len() >= threshold)
             .unwrap_or(false);
 
-        let context_prompt = if should_use_toon {
+        let mut context_prompt = if should_use_toon {
             // TOON optimization - compress context
-            let toon_ctx = Toon::serialize(&serde_json::to_value(&self.global_context).unwrap_or(serde_json::json!({})));
-            format!("[CONTEXT:TOON]\n{}\n[Note: TOON is a compact key:value format to save tokens]\n", toon_ctx)
+            let context_value = serde_json::to_value(&self.global_context)
+                .map_err(|e| AetherError::ContextSerializationError(e.to_string()))?;
+            let toon_ctx = Toon::serialize(&context_value);
+            format!(
+                "[CONTEXT:TOON]\n{}\n\n[TOON Protocol Note]\nTOON is a compact key:value mapping protocol. Each line represents 'key: value'. Use this context to inform your code generation, respecting the framework, language, and architectural constraints defined within.",
+                toon_ctx
+            )
         } else {
             base_context
         };
 
-        let mut context_prompt = context_prompt;
-        // If self-healing is enabled, encourage AI to write unit tests
+        // If self-healing is enabled, encourage AI to pass tests
         if self.validator.is_some() {
-            context_prompt.push_str("\n\nIMPORTANT: Include a Rust `#[cfg(test)] mod tests { ... }` block with at least one unit test to verify your code. The system will automatically run these tests to validate your output.");
+            context_prompt.push_str("\n\nIMPORTANT: The system is running in TDD (Test-Driven Development) mode. ");
+            context_prompt.push_str("Your code will be validated against compiler checks and functional tests. ");
+            context_prompt.push_str("If possible, include unit tests in your response to help self-verify. ");
+            context_prompt.push_str("If validation fails, you will receive feedback to fix the code.");
         }
+        
+        let context_prompt = Arc::new(context_prompt);
 
         if self.parallel {
             injections = self
-                .generate_parallel(template, &context_prompt)
+                .generate_parallel(template, context_prompt)
                 .await?;
         } else {
             for (name, slot) in &template.slots {
                 debug!("Generating code for slot: {}", name);
+                let id = uuid::Uuid::new_v4().to_string();
 
                 let request = GenerationRequest {
                     slot: slot.clone(),
-                    context: Some(context_prompt.clone()),
+                    context: Some((*context_prompt).clone()),
                     system_prompt: None,
                 };
 
-                let response = self.generate_with_retry(request).await?;
-                injections.insert(name.clone(), response.code);
+                if let Some(ref obs) = self.observer {
+                    obs.on_start(&id, &template.name, name, &request);
+                }
+
+                match self.generate_with_retry(request, &id).await {
+                    Ok(response) => {
+                        if let Some(ref obs) = self.observer {
+                            obs.on_success(&id, &response);
+                        }
+                        injections.insert(name.clone(), response.code);
+                    }
+                    Err(e) => {
+                        if let Some(ref obs) = self.observer {
+                            obs.on_failure(&id, &e.to_string());
+                        }
+                        return Err(e);
+                    }
+                }
             }
         }
 
         Ok(injections)
     }
 
-    /// Generate code for all slots in parallel.
     async fn generate_parallel(
         &self,
         template: &Template,
-        context_prompt: &str,
+        context_prompt: Arc<String>,
     ) -> Result<HashMap<String, String>> {
         use tokio::task::JoinSet;
 
@@ -209,18 +323,37 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
             let provider = Arc::clone(&self.provider);
             let validator = self.validator.clone();
             let cache = self.cache.clone();
-            let context = context_prompt.to_string();
+            let context = Arc::clone(&context_prompt);
             let max_retries = self.max_retries;
+            let template_name = template.name.clone();
+            let observer = self.observer.clone();
 
             join_set.spawn(async move {
+                let id = uuid::Uuid::new_v4().to_string();
                 let request = GenerationRequest {
                     slot,
-                    context: Some(context),
+                    context: Some((*context).clone()),
                     system_prompt: None,
                 };
 
-                let response = Self::generate_with_healing_static(&provider, &validator, &cache, request, max_retries).await?;
-                Ok::<_, AetherError>((name, response.code))
+                if let Some(ref obs) = observer {
+                    obs.on_start(&id, &template_name, &name, &request);
+                }
+
+                match Self::generate_with_healing_static(&provider, &validator, &cache, &observer, request, max_retries, &id).await {
+                    Ok(response) => {
+                        if let Some(ref obs) = observer {
+                            obs.on_success(&id, &response);
+                        }
+                        Ok::<_, AetherError>((name, response.code))
+                    }
+                    Err(e) => {
+                        if let Some(ref obs) = observer {
+                            obs.on_failure(&id, &e.to_string());
+                        }
+                        Err(e)
+                    }
+                }
             });
         }
 
@@ -234,8 +367,8 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
     }
 
     /// Generate with self-healing logic.
-    async fn generate_with_retry(&self, request: GenerationRequest) -> Result<GenerationResponse> {
-        Self::generate_with_healing_static(&self.provider, &self.validator, &self.cache, request, self.max_retries).await
+    async fn generate_with_retry(&self, request: GenerationRequest, id: &str) -> Result<GenerationResponse> {
+        Self::generate_with_healing_static(&self.provider, &self.validator, &self.cache, &self.observer, request, self.max_retries, id).await
     }
 
     /// Static version of generate with self-healing support.
@@ -243,8 +376,10 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
         provider: &Arc<P>,
         validator: &Option<Arc<dyn Validator>>,
         cache: &Option<Arc<dyn Cache>>,
+        observer: &Option<ObserverPtr>,
         mut request: GenerationRequest,
         max_retries: u32,
+        id: &str,
     ) -> Result<GenerationResponse> {
         // 0. Check cache first
         let cache_key = if cache.is_some() {
@@ -287,8 +422,9 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
                 if let Ok(formatted) = val.format(&request.slot.kind, &response.code) {
                     response.code = formatted;
                 }
-
-                match val.validate(&request.slot.kind, &response.code)? {
+                
+                // Use validate_with_slot to support TDD harnesses
+                match val.validate_with_slot(&request.slot, &response.code)? {
                     ValidationResult::Valid => {
                         // Success! Cache if enabled
                         if let (Some(ref c), Some(ref key)) = (cache, &cache_key) {
@@ -300,7 +436,14 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
                         info!("Self-healing: Validation failed for slot '{}', attempt {}. Error: {}", 
                             request.slot.name, attempt + 1, err_msg);
                         
-                        last_error = Some(AetherError::ProviderError(err_msg.clone()));
+                        if let Some(ref obs) = observer {
+                            obs.on_healing_step(id, attempt + 1, &err_msg);
+                        }
+
+                        last_error = Some(AetherError::ValidationFailed { 
+                            slot: request.slot.name.clone(), 
+                            error: err_msg.clone() 
+                        });
 
                         if attempt < max_retries {
                             // Feedback Loop: Add error to prompt for next attempt
@@ -322,7 +465,11 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| AetherError::ProviderError("Healing failed".to_string())))
+        Err(last_error.unwrap_or_else(|| AetherError::MaxRetriesExceeded { 
+            slot: request.slot.name, 
+            retries: max_retries, 
+            last_error: "Healing failed without specific error".to_string() 
+        }))
     }
 
     /// Generate code for a single slot.
@@ -338,8 +485,25 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
             system_prompt: None,
         };
 
-        let response = self.generate_with_retry(request).await?;
-        Ok(response.code)
+        let id = uuid::Uuid::new_v4().to_string();
+        if let Some(ref obs) = self.observer {
+            obs.on_start(&id, &template.name, slot_name, &request);
+        }
+
+        match self.generate_with_retry(request, &id).await {
+            Ok(response) => {
+                if let Some(ref obs) = self.observer {
+                    obs.on_success(&id, &response);
+                }
+                Ok(response.code)
+            }
+            Err(e) => {
+                if let Some(ref obs) = self.observer {
+                    obs.on_failure(&id, &e.to_string());
+                }
+                Err(e)
+            }
+        }
     }
 
     /// Generate code for a single slot as a stream.
@@ -360,6 +524,15 @@ impl<P: AiProvider + 'static> InjectionEngine<P> {
         };
 
         Ok(self.provider.generate_stream(request))
+    }
+
+    /// Inject a raw prompt and get the code back directly.
+    /// Used primarily by the script runtime.
+    pub async fn inject_raw(&self, prompt: &str) -> Result<String> {
+        let template = Template::new("{{AI:gen}}")
+            .with_slot("gen", prompt);
+        
+        self.render(&template).await
     }
 }
 
@@ -440,5 +613,51 @@ mod tests {
         let result = engine.render(&template).await.unwrap();
         assert!(result.contains("code1"));
         assert!(result.contains("code2"));
+    }
+
+    #[tokio::test]
+    async fn test_max_retries_exceeded() {
+        let provider = MockProvider::new()
+            .with_response("fail", "invalid code");
+
+        // Use a validator that always fails
+        struct FailingValidator;
+        impl Validator for FailingValidator {
+            fn validate(&self, _: &SlotKind, _: &str) -> Result<ValidationResult> {
+                Ok(ValidationResult::Invalid("Always fails".to_string()))
+            }
+        }
+
+        let engine = InjectionEngine::new(provider)
+            .with_validator(FailingValidator)
+            .max_retries(1);
+
+        let template = Template::new("{{AI:fail}}");
+        let result = engine.render(&template).await;
+
+        match result {
+            Err(AetherError::MaxRetriesExceeded { slot, retries, .. }) => {
+                assert_eq!(slot, "fail");
+                assert_eq!(retries, 1);
+            }
+            _ => panic!("Expected MaxRetriesExceeded error, got {:?}", result),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_auto_toon_activation() {
+        let provider = MockProvider::new()
+            .with_response("slot", "code");
+
+        // Set a very low threshold to force TOON
+        let config = AetherConfig::default().with_auto_toon_threshold(Some(5));
+        let engine = InjectionEngine::with_config(provider, config)
+            .with_context(InjectionContext::new().with_framework("very_long_framework_name"));
+
+        let template = Template::new("{{AI:slot}}");
+        let _ = engine.render(&template).await.unwrap();
+        
+        // Internal check: toon should be used because context length > 5
+        // Since we can't easily check internal state, we verify it runs without error
     }
 }

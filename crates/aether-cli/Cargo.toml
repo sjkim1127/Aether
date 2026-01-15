@@ -7,8 +7,9 @@ license.workspace = true
 description = "Command line interface for Aether Codegen"
 
 [dependencies]
-aether-core = { path = "../aether-core" }
-aether-ai = { path = "../aether-ai" }
+aether-core = { workspace = true }
+aether-ai = { workspace = true }
+aether-inspector = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true }
