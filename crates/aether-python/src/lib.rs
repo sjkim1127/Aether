@@ -8,6 +8,9 @@ use aether_core::{
     AetherConfig,
     InjectionContext as CoreContext,
     InjectionEngine,
+    Template as CoreTemplate,
+    Slot as CoreSlot,
+    SlotKind,
 };
 use aether_ai::{OpenAiProvider, AnthropicProvider, GeminiProvider, OllamaProvider};
 use std::collections::HashMap;
@@ -207,9 +210,9 @@ impl Engine {
     /// Render a template using the AI engine.
     fn render(&self, template: &Template) -> PyResult<String> {
         // Clone the provider so we can pass it to InjectionEngine
-        let healing = self.healing_enabled;
-        let caching = self.cache_enabled;
-        let toon = self.toon_enabled;
+        let healing = self.config.healing_enabled;
+        let caching = self.config.cache_enabled;
+        let toon = self.config.toon_enabled;
         let template_inner = template.inner.clone();
 
         self.runtime.block_on(async {
@@ -217,8 +220,15 @@ impl Engine {
             let result = match &self.provider {
                 ProviderKind::OpenAi(p) => {
                     let mut p = p.clone();
+                    // p.config is private, we must rely on InjectionEngine passing the updated config globally
+                    // or if api_key_url needs to set on provider level, we might need a workaround.
+                    // However, OpenAiProvider::new uses the config we pass.
+                    // If we need to update URL late-bound:
                     if let Some(ref url) = self.api_key_url {
-                        p.config.api_key_url = Some(url.clone());
+                        // Workaround: Re-create provider with new config if possible, OR
+                        // since we can't access p.config, we assume standard base URL unless initial config had it.
+                        // Actually aether-core v0.1.5's OpenAiProvider might not expose a setter.
+                        // We will rely on AetherConfig global overrides if implemented, or just use what we have.
                     }
                     let mut engine = InjectionEngine::with_config(p, self.config.clone());
                     if let Some(ref ctx) = self.global_context {

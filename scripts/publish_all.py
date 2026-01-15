@@ -52,12 +52,18 @@ def run_cmd(args, cwd=None, env=None, capture_output=False):
 
 def load_env():
     """Load variables from .env file into os.environ."""
-    env_path = Path(__file__).parent / ".env"
-    if not env_path.exists():
-        log(f"No .env file found at {env_path}. Please create it from .env.example.", "ERROR")
+    # Check scripts directory first, then project root
+    script_dir = Path(__file__).resolve().parent
+    root_dir = script_dir.parent
+    
+    possible_paths = [script_dir / ".env", root_dir / ".env"]
+    env_path = next((p for p in possible_paths if p.exists()), None)
+
+    if not env_path:
+        log(f"No .env file found in {script_dir} or {root_dir}. Please create it.", "ERROR")
         sys.exit(1)
     
-    log("Loading environment variables from .env...", "INFO")
+    log(f"Loading environment variables from {env_path}...", "INFO")
     with open(env_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -82,31 +88,40 @@ def publish_rust():
     ]
 
     for crate_path in crates:
-        log(f"Publishing {crate_path}...", "WARNING")
-        try:
-            # Capture output to check for "already exists" error
-            result = subprocess.run(
-                ["cargo", "publish", "--token", token, "--allow-dirty", "--no-verify"],
-                cwd=crate_path,
-                capture_output=True,
-                text=True,
-                shell=True if os.name == 'nt' else False
-            )
-            
-            if result.returncode == 0:
-                log(f"Successfully published {crate_path}.", "SUCCESS")
-                log("Waiting 45s for Crates.io propagation...", "INFO")
-                time.sleep(45)
-            elif "already exists" in result.stderr or "already exists" in result.stdout:
-                log(f"Crate {crate_path} already exists on Crates.io. Skipping...", "INFO")
-                # Continue anyway
-            else:
-                log(f"Failed to publish {crate_path} (Exit code {result.returncode})", "ERROR")
-                print(result.stderr or result.stdout)
-                raise subprocess.CalledProcessError(result.returncode, result.args, result.stdout, result.stderr)
-        except Exception as e:
-            log(f"Failed to publish {crate_path}: {e}", "ERROR")
-            raise
+        for attempt in range(4):
+            log(f"Publishing {crate_path} (Attempt {attempt+1}/4)...", "WARNING")
+            try:
+                # Capture output to check for "already exists" error
+                result = subprocess.run(
+                    ["cargo", "publish", "--token", token, "--allow-dirty", "--no-verify"],
+                    cwd=crate_path,
+                    capture_output=True,
+                    text=True,
+                    shell=True if os.name == 'nt' else False
+                )
+                
+                if result.returncode == 0:
+                    log(f"Successfully published {crate_path}.", "SUCCESS")
+                    log("Waiting 45s for Crates.io propagation...", "INFO")
+                    time.sleep(45)
+                    break # Success, move to next crate
+                elif "already exists" in result.stderr or "already exists" in result.stdout:
+                    log(f"Crate {crate_path} already exists on Crates.io. Skipping...", "INFO")
+                    break # Already done, move to next
+                else:
+                    if attempt < 3:
+                        log(f"Failed to publish {crate_path}. Retrying in 20s...", "WARNING")
+                        time.sleep(20)
+                        continue
+                    
+                    log(f"Failed to publish {crate_path} (Exit code {result.returncode})", "ERROR")
+                    print(result.stderr or result.stdout)
+                    raise subprocess.CalledProcessError(result.returncode, result.args, result.stdout, result.stderr)
+            except Exception as e:
+                if attempt < 3: 
+                    continue
+                log(f"Failed to publish {crate_path}: {e}", "ERROR")
+                raise
 
 def publish_python():
     log("\n--- Publishing Python Wheel to PyPI ---", "HEADER")
@@ -158,7 +173,7 @@ if __name__ == "__main__":
         
         log("🚀 Starting Aether v0.1.5 Deployment Stack", "SUCCESS")
         
-        publish_rust()
+        # publish_rust()
         publish_python()
         publish_node()
         
