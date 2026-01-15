@@ -5,6 +5,7 @@
 use crate::{Result, Slot};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Configuration for an AI provider.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -216,6 +217,42 @@ pub trait AiProvider: Send + Sync {
     /// Check if the provider is available and configured correctly.
     async fn health_check(&self) -> Result<bool> {
         Ok(true)
+    }
+}
+
+#[async_trait]
+impl<T: AiProvider + ?Sized + Send + Sync> AiProvider for Arc<T> {
+    fn name(&self) -> &str {
+        (**self).name()
+    }
+
+    async fn generate(&self, request: GenerationRequest) -> Result<GenerationResponse> {
+        (**self).generate(request).await
+    }
+
+    fn generate_stream(
+        &self,
+        request: GenerationRequest,
+    ) -> BoxStream<'static, Result<StreamResponse>> {
+        (**self).generate_stream(request)
+    }
+}
+
+#[async_trait]
+impl<T: AiProvider + ?Sized + Send + Sync> AiProvider for Box<T> {
+    fn name(&self) -> &str {
+        (**self).name()
+    }
+
+    async fn generate(&self, request: GenerationRequest) -> Result<GenerationResponse> {
+        (**self).generate(request).await
+    }
+
+    fn generate_stream(
+        &self,
+        request: GenerationRequest,
+    ) -> BoxStream<'static, Result<StreamResponse>> {
+        (**self).generate_stream(request)
     }
 }
 

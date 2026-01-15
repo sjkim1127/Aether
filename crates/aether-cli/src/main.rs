@@ -183,7 +183,6 @@ async fn main() -> Result<()> {
 
             run_generation(engine, tmpl, output, *stream).await?;
         }
-        }
         Commands::Init => {
             println!("Initializing Aether project... (Not implemented yet)");
         }

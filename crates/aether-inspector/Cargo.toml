@@ -1,9 +1,9 @@
 [package]
 name = "aether-inspector"
-version = "0.1.0"
-edition = "2021"
-authors = ["Aether Team"]
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
 description = "Real-time visualization and debugging dashboard for Aether Codegen"
 
 [dependencies]
