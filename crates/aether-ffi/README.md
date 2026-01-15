@@ -91,6 +91,7 @@ target_link_libraries(your_target PUBLIC ${AETHER_LIB})
 | `aether_create_anthropic_provider(model)` | Create Anthropic (Claude) provider |
 | `aether_create_gemini_provider(model)` | Create Google Gemini provider |
 | `aether_create_ollama_provider(model)` | Create Ollama (local) provider |
+| `aether_create_grok_provider(model)` | **Create Grok (xAI) provider** |
 | `aether_free_provider(provider)` | Free provider handle |
 | `aether_create_engine(provider)` | Create injection engine |
 | `aether_engine_enable_healing(engine)` | **Enable Self-Healing** (validates & retries) |

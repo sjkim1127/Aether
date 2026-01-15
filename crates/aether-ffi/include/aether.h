@@ -71,6 +71,17 @@ struct AetherProvider *aether_create_gemini_provider(const char *model);
 struct AetherProvider *aether_create_ollama_provider(const char *model);
 
 /**
+ * Create a Grok (xAI) provider.
+ *
+ * # Arguments
+ * * `model` - Model name (e.g., "grok-1"). Pass NULL for default.
+ *
+ * # Returns
+ * Provider handle on success, NULL on failure. Check `aether_last_error()`.
+ */
+struct AetherProvider *aether_create_grok_provider(const char *model);
+
+/**
  * Free a provider handle.
  */
 void aether_free_provider(struct AetherProvider *provider);

@@ -20,6 +20,7 @@ enum ProviderKind {
     Anthropic(AnthropicProvider),
     Gemini(GeminiProvider),
     Ollama(OllamaProvider),
+    Grok(OpenAiProvider),  // Grok uses OpenAI-compatible API
 }
 
 // ============================================================
@@ -101,6 +102,16 @@ impl Engine {
                 let p = OllamaProvider::new(mod_name);
                 ProviderKind::Ollama(p)
             },
+            "grok" | "xai" => {
+                let key = api_key.or_else(|| std::env::var("XAI_API_KEY").ok())
+                    .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyValueError, _>("XAI_API_KEY not set"))?;
+                let mod_name = model.or_else(|| std::env::var("GROK_MODEL").ok())
+                    .unwrap_or_else(|| "grok-1".to_string());
+                let config = ProviderConfig::new(key, mod_name)
+                    .with_base_url("https://api.x.ai/v1/chat/completions");
+                let p = OpenAiProvider::new(config).map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;
+                ProviderKind::Grok(p)
+            },
             _ => return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Unknown provider: {}", provider))),
         };
 
@@ -163,6 +174,7 @@ impl Engine {
                 ProviderKind::Anthropic(p) => build_and_render!(p),
                 ProviderKind::Gemini(p) => build_and_render!(p),
                 ProviderKind::Ollama(p) => build_and_render!(p),
+                ProviderKind::Grok(p) => build_and_render!(p),
             };
 
             result.map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
@@ -272,6 +284,7 @@ impl Engine {
                 ProviderKind::Anthropic(p) => stream_render!(p),
                 ProviderKind::Gemini(p) => stream_render!(p),
                 ProviderKind::Ollama(p) => stream_render!(p),
+                ProviderKind::Grok(p) => stream_render!(p),
             }
         })
     }

@@ -239,6 +239,35 @@ pub extern "C" fn aether_create_ollama_provider(model: *const c_char) -> *mut Ae
     Box::into_raw(handle)
 }
 
+/// Create a Grok (xAI) provider.
+///
+/// # Arguments
+/// * `model` - Model name (e.g., "grok-1"). Pass NULL for default.
+///
+/// # Returns
+/// Provider handle on success, NULL on failure. Check `aether_last_error()`.
+#[no_mangle]
+pub extern "C" fn aether_create_grok_provider(model: *const c_char) -> *mut AetherProvider {
+    let model_str = if model.is_null() {
+        "grok-1".to_string()
+    } else {
+        unsafe { CStr::from_ptr(model) }.to_string_lossy().into_owned()
+    };
+
+    match aether_ai::grok(&model_str) {
+        Ok(provider) => {
+            let handle = Box::new(AetherProvider {
+                inner: Arc::new(provider),
+            });
+            Box::into_raw(handle)
+        }
+        Err(e) => {
+            set_last_error(e.to_string());
+            ptr::null_mut()
+        }
+    }
+}
+
 /// Free a provider handle.
 #[no_mangle]
 pub extern "C" fn aether_free_provider(provider: *mut AetherProvider) {
