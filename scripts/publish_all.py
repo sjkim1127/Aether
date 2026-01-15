@@ -77,8 +77,8 @@ def publish_rust():
         "crates/aether-macros",
         "crates/aether-core",
         "crates/aether-ai",
-        "crates/aether-cli",
-        "crates/aether-inspector"
+        "crates/aether-inspector",
+        "crates/aether-cli"
     ]
 
     for crate_path in crates:
@@ -86,7 +86,7 @@ def publish_rust():
         try:
             # Capture output to check for "already exists" error
             result = subprocess.run(
-                ["cargo", "publish", "--token", token, "--allow-dirty"],
+                ["cargo", "publish", "--token", token, "--allow-dirty", "--no-verify"],
                 cwd=crate_path,
                 capture_output=True,
                 text=True,

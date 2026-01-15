@@ -87,7 +87,6 @@ name = "aether-core"
 version = "0.1.4"
 dependencies = [
  "aes-gcm",
- "aether-ai",
  "aether-macros",
  "async-stream",
  "async-trait",
