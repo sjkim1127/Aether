@@ -35,7 +35,7 @@ impl AetherScript {
 /// Aether-enhanced runtime that supports agentic functions.
 pub struct AetherAgenticRuntime<P: AiProvider> {
     engine: Engine,
-    provider: Arc<P>,
+    _provider: Arc<P>,
 }
 
 impl<P: AiProvider + 'static> AetherAgenticRuntime<P> {
@@ -67,7 +67,7 @@ impl<P: AiProvider + 'static> AetherAgenticRuntime<P> {
             }
         });
 
-        Self { engine, provider }
+        Self { engine, _provider: provider }
     }
 
     /// Execute an Aether Script.

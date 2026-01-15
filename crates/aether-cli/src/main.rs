@@ -1,9 +1,9 @@
-use aether_core::{InjectionEngine, Template, ProviderConfig};
+use aether_core::{InjectionEngine, Template};
 use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use dotenvy::dotenv;
-use log::{info, error, debug};
+use log::{info, error};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -71,8 +71,6 @@ enum Commands {
 }
 
 use futures::stream::StreamExt;
-use aether_core::validation::RustValidator;
-use aether_core::cache::SemanticCache;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 enum ProviderType {
