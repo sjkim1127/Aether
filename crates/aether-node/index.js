@@ -116,7 +116,7 @@ switch (platform) {
         nativeBinding = require('@sjkim1127/aether-codegen-darwin-universal')
       }
       break
-    } catch {}
+    } catch { }
     switch (arch) {
       case 'x64':
         localFileExisted = existsSync(join(__dirname, 'aether-codegen.darwin-x64.node'))
@@ -310,7 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { Template, Slot, ProviderType, AetherEngine, generate, renderTemplate } = nativeBinding
+const { Template, Slot, ProviderType, AetherEngine, generate, renderTemplate, RenderSession } = nativeBinding
 
 module.exports.Template = Template
 module.exports.Slot = Slot
@@ -318,3 +318,4 @@ module.exports.ProviderType = ProviderType
 module.exports.AetherEngine = AetherEngine
 module.exports.generate = generate
 module.exports.renderTemplate = renderTemplate
+module.exports.RenderSession = RenderSession

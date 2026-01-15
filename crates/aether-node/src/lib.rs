@@ -24,6 +24,7 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use std::collections::HashMap;
+use tokio::sync::Mutex;
 
 use aether_core::{
     InjectionContext as CoreContext,
@@ -31,6 +32,7 @@ use aether_core::{
     Slot as CoreSlot,
     SlotKind as CoreSlotKind,
     Template as CoreTemplate,
+    RenderSession as CoreRenderSession,
     AetherRuntime,
 };
 use aether_ai::{OpenAiProvider, AnthropicProvider, OllamaProvider};
@@ -81,6 +83,35 @@ impl Template {
     #[napi(getter)]
     pub fn content(&self) -> String {
         self.inner.content.clone()
+    }
+}
+
+/// JavaScript-accessible RenderSession class for incremental rendering.
+#[napi]
+pub struct RenderSession {
+    inner: Mutex<CoreRenderSession>,
+}
+
+#[napi]
+impl RenderSession {
+    /// Create a new empty render session.
+    #[napi(constructor)]
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(CoreRenderSession::new()),
+        }
+    }
+
+    /// Get the number of cached slot results.
+    #[napi(getter)]
+    pub fn cached_count(&self) -> u32 {
+        self.inner.blocking_lock().results.len() as u32
+    }
+
+    /// Clear all cached results.
+    #[napi]
+    pub fn clear(&self) {
+        self.inner.blocking_lock().results.clear();
     }
 }
 
@@ -464,6 +495,85 @@ impl AetherEngine {
         
         engine.render(template).await
             .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Render a template incrementally using a session to cache results.
+    ///
+    /// Only slots that have changed since the last render will be regenerated.
+    ///
+    /// # Example (JavaScript)
+    /// ```javascript
+    /// const session = new RenderSession();
+    /// const result1 = await engine.renderIncremental(template, session);  // Full render
+    /// const result2 = await engine.renderIncremental(template, session);  // Uses cache
+    /// ```
+    #[napi]
+    pub async fn render_incremental(
+        &self,
+        template: &Template,
+        session: &RenderSession,
+    ) -> Result<String> {
+        match self.provider_type {
+            ProviderType::OpenAI => {
+                let api_key = self.api_key.clone()
+                    .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+                    .unwrap_or_default();
+                
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                let provider = OpenAiProvider::new(config)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                
+                let engine = CoreEngine::new(provider);
+                engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
+                    .map_err(|e| Error::from_reason(e.to_string()))
+            }
+            ProviderType::Anthropic => {
+                let api_key = self.api_key.clone()
+                    .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+                    .unwrap_or_default();
+                
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                let provider = AnthropicProvider::new(config)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                
+                let engine = CoreEngine::new(provider);
+                engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
+                    .map_err(|e| Error::from_reason(e.to_string()))
+            }
+            ProviderType::Gemini => {
+                let api_key = self.api_key.clone()
+                    .or_else(|| std::env::var("GOOGLE_API_KEY").ok())
+                    .unwrap_or_default();
+                
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model);
+                let provider = aether_ai::GeminiProvider::new(config)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                
+                let engine = CoreEngine::new(provider);
+                engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
+                    .map_err(|e| Error::from_reason(e.to_string()))
+            }
+            ProviderType::Ollama => {
+                let provider = OllamaProvider::new(&self.model);
+                let engine = CoreEngine::new(provider);
+                engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
+                    .map_err(|e| Error::from_reason(e.to_string()))
+            }
+            ProviderType::Grok => {
+                let api_key = self.api_key.clone()
+                    .or_else(|| std::env::var("XAI_API_KEY").ok())
+                    .unwrap_or_default();
+                
+                let config = aether_core::ProviderConfig::new(&api_key, &self.model)
+                    .with_base_url("https://api.x.ai/v1/chat/completions");
+                let provider = OpenAiProvider::new(config)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                
+                let engine = CoreEngine::new(provider);
+                engine.render_incremental(&template.inner, &mut *session.inner.lock().await).await
+                    .map_err(|e| Error::from_reason(e.to_string()))
+            }
+        }
     }
 
     /// Get streaming chunks as an array (alternative to callback-based streaming).

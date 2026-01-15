@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use aether_core::{
     InjectionEngine, Template as CoreTemplate, Slot as CoreSlot,
-    AetherRuntime, ProviderConfig,
+    AetherRuntime, ProviderConfig, RenderSession as CoreRenderSession,
     cache::SemanticCache,
     validation::RustValidator,
 };
@@ -44,6 +44,33 @@ impl Template {
             slot = slot.with_temperature(t);
         }
         self.inner = self.inner.clone().configure_slot(slot);
+    }
+}
+
+// ============================================================
+// RenderSession Class (Incremental Rendering)
+// ============================================================
+#[pyclass]
+struct RenderSession {
+    inner: CoreRenderSession,
+}
+
+#[pymethods]
+impl RenderSession {
+    /// Create a new empty render session.
+    #[new]
+    fn new() -> Self {
+        RenderSession { inner: CoreRenderSession::new() }
+    }
+
+    /// Get the number of cached slot results.
+    fn cached_count(&self) -> usize {
+        self.inner.results.len()
+    }
+
+    /// Clear all cached results.
+    fn clear(&mut self) {
+        self.inner.results.clear();
     }
 }
 
@@ -181,6 +208,46 @@ impl Engine {
         })
     }
 
+    /// Render a template incrementally using a session to cache results.
+    /// 
+    /// Only slots that have changed since the last render will be regenerated.
+    /// This is useful for iterative development and reducing API calls.
+    /// 
+    /// # Arguments
+    /// * `template` - The template to render.
+    /// * `session` - A RenderSession object that caches results.
+    /// 
+    /// # Example
+    /// ```python
+    /// session = RenderSession()
+    /// result1 = engine.render_incremental(template, session)  # Full render
+    /// result2 = engine.render_incremental(template, session)  # Uses cache
+    /// template.add_slot("new_slot", "New prompt")
+    /// result3 = engine.render_incremental(template, session)  # Only renders new_slot
+    /// ```
+    fn render_incremental(&self, template: &Template, session: &mut RenderSession) -> PyResult<String> {
+        let template_inner = template.inner.clone();
+
+        self.runtime.block_on(async {
+            macro_rules! incremental_render {
+                ($provider:expr) => {{
+                    let engine = InjectionEngine::new($provider.clone());
+                    engine.render_incremental(&template_inner, &mut session.inner).await
+                }};
+            }
+
+            let result = match &self.provider {
+                ProviderKind::OpenAi(p) => incremental_render!(p),
+                ProviderKind::Anthropic(p) => incremental_render!(p),
+                ProviderKind::Gemini(p) => incremental_render!(p),
+                ProviderKind::Ollama(p) => incremental_render!(p),
+                ProviderKind::Grok(p) => incremental_render!(p),
+            };
+
+            result.map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+        })
+    }
+
     /// Execute a Rhai script directly (Aether Shield core functionality).
     /// 
     /// # Arguments
@@ -297,5 +364,6 @@ impl Engine {
 fn aether(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Engine>()?;
     m.add_class::<Template>()?;
+    m.add_class::<RenderSession>()?;
     Ok(())
 }

@@ -289,6 +289,12 @@ engine.setToon(true);  // Enable TOON Protocol
 const template = new Template("<div>{{AI:content}}</div>");
 template.setSlot("content", "Generate a welcome message");
 const result = await engine.render(template);
+
+// Incremental Rendering (using RenderSession)
+const { RenderSession } = require('@aether/codegen');
+const session = new RenderSession();
+const incrementalResult = await engine.renderIncremental(template, session);
+console.log(`Cached slots: ${session.cachedCount}`);
 ```
 
 ### TypeScript Support
@@ -342,6 +348,11 @@ template.add_slot("code", "Implement recursive Fibonacci calculation", 0.7)
 # Render using the Rust core engine
 result = engine.render(template)
 print(result)
+
+# Incremental Rendering (extremely fast for iterative changes)
+session = aether.RenderSession()
+result2 = engine.render_incremental(template, session)
+print(f"Cached items: {session.cached_count()}")
 ```
 
 ### Aether Shield for Python
