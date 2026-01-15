@@ -1,0 +1,22 @@
+[package]
+name = "aether-ffi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "C/C++ FFI bindings for Aether AI code injection framework"
+build = "build.rs"
+
+[lib]
+name = "aether"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+aether-core = { workspace = true }
+aether-ai = { workspace = true }
+tokio = { workspace = true }
+once_cell = "1.19"
+libc = "0.2"
+
+[build-dependencies]
+cbindgen = "0.26"

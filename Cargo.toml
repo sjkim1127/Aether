@@ -8,6 +8,7 @@ members = [
     "crates/aether-cli",
     "crates/aether-python",
     "crates/aether-inspector",
+    "crates/aether-ffi",
 ]
 
 [workspace.package]
